@@ -1194,11 +1194,540 @@
 
 
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
-// import { Audio } from 'expo-av';
-import * as Haptics from 'expo-haptics';
-import React, { useCallback, useEffect, useState } from 'react';
+// import AsyncStorage from '@react-native-async-storage/async-storage';
+// import * as Notifications from 'expo-notifications';
+// // import { Audio } from 'expo-av';
+// import * as Haptics from 'expo-haptics';
+// import React, { useCallback, useEffect, useState } from 'react';
+// import {
+//   ActivityIndicator,
+//   Alert,
+//   FlatList,
+//   RefreshControl,
+//   SafeAreaView,
+//   StyleSheet,
+//   Text,
+//   TouchableOpacity,
+//   View,
+//   Platform,
+//   Vibration
+// } from 'react-native';
+
+// // Notification configuration
+// Notifications.setNotificationHandler({
+//   handleNotification: async () => ({
+//     shouldShowAlert: true,
+//     shouldPlaySound: true,
+//     shouldSetBadge: false,
+//   }),
+// });
+
+// interface Reminder {
+//   id: string;
+//   title: string;
+//   description: string;
+//   reminderType: string;
+//   scheduledDateTime: string;
+//   nextTrigger: string;
+//   isRecurring: boolean;
+//   recurrencePattern?: {
+//     type: string;
+//     interval: number;
+//     daysOfWeek?: number[];
+//     endDate: string;
+//   };
+//   alarmSettings: {
+//     soundType: string;
+//     volume: number;
+//     vibrate: boolean;
+//     snoozeEnabled: boolean;
+//     snoozeDuration: number;
+//   };
+//   priority: string;
+//   requiresConfirmation: boolean;
+//   status: string;
+//   elderlyUser: {
+//     id: string;
+//     name: string;
+//   };
+//   createdBy: {
+//     id: string;
+//     name: string;
+//   };
+//   group: {
+//     id: string;
+//     name: string;
+//   };
+//   createdAt: string;
+// }
+
+// export default function ReminderListScreen() {
+//   const [reminders, setReminders] = useState<Reminder[]>([]);
+//   const [loading, setLoading] = useState(true);
+//   const [refreshing, setRefreshing] = useState(false);
+//   const [sound, setSound] = useState<Audio.Sound | null>(null);
+
+//   // Cleanup sound on unmount
+//   useEffect(() => {
+//     return sound
+//       ? () => {
+//           sound.unloadAsync();
+//         }
+//       : undefined;
+//   }, [sound]);
+
+//   const fetchReminders = useCallback(async () => {
+//     setLoading(true);
+//     try {
+//       const token = await AsyncStorage.getItem('accessToken');
+//       if (!token) {
+//         Alert.alert('Authentication Error', 'Please login again');
+//         setLoading(false);
+//         setRefreshing(false);
+//         return;
+//       }
+      
+//       const res = await fetch(`https://elderlybackend.onrender.com/api/reminders`, {
+//         method: 'GET',
+//         headers: {
+//           'Authorization': `Bearer ${token}`,
+//           'Content-Type': 'application/json'
+//         }
+//       });
+      
+//       const text = await res.text();
+//       let data;
+//       try {
+//         data = JSON.parse(text);
+//       } catch {
+//         throw new Error('Invalid server response');
+//       }
+      
+//       if (!res.ok || !data.success || !data.data || !Array.isArray(data.data.reminders)) {
+//         setReminders([]);
+//         throw new Error(data.message || 'Failed to fetch reminders');
+//       }
+      
+//       setReminders(data.data.reminders);
+//       console.log('📋 Reminders fetched:', data.data.reminders.length);
+//     } catch (error: any) {
+//       console.error('[Reminder Fetch]', error);
+//       Alert.alert('Error', error.message || 'Failed to fetch reminders');
+//       setReminders([]);
+//     } finally {
+//       setLoading(false);
+//       setRefreshing(false);
+//     }
+//   }, []);
+
+//   useEffect(() => {
+//     fetchReminders();
+//     requestNotificationPermissions();
+//     setupNotificationChannel();
+//   }, [fetchReminders]);
+
+//   // Set up notification channel for Android
+//   const setupNotificationChannel = async () => {
+//     if (Platform.OS === 'android') {
+//       await Notifications.setNotificationChannelAsync('alarm-reminders', {
+//         name: 'Alarm Reminders',
+//         importance: Notifications.AndroidImportance.HIGH,
+//         sound: 'alarm_sound',
+//         vibrationPattern: [0, 500, 500, 500],
+//         enableLights: true,
+//         enableVibrate: true,
+//       });
+//     }
+//   };
+
+//   const requestNotificationPermissions = async () => {
+//     try {
+//       const { status } = await Notifications.requestPermissionsAsync();
+//       if (status !== 'granted') {
+//         Alert.alert('Permission Required', 'Please enable notifications to receive reminders');
+//       }
+//     } catch (error) {
+//       console.log('Notification permission error:', error);
+//     }
+//   };
+
+//   const onRefresh = useCallback(() => {
+//     setRefreshing(true);
+//     fetchReminders();
+//   }, [fetchReminders]);
+
+//   // Play alarm sound effect
+//   const playAlarmSound = async (soundType: string) => {
+//     try {
+//       // Stop any currently playing sound
+//       if (sound) {
+//         await sound.stopAsync();
+//         await sound.unloadAsync();
+//       }
+      
+//       let soundFile;
+//       if (soundType === 'loud') {
+//         soundFile = require('../../../assets/loud_alarm.mp3');
+//       } else {
+//         soundFile = require('../../../assets/gentle_alarm.mp3');
+//       }
+      
+//       const { sound: newSound } = await Audio.Sound.createAsync(
+//         soundFile,
+//         { shouldPlay: true, isLooping: true }
+//       );
+//       setSound(newSound);
+//       console.log('🔊 Playing alarm sound');
+//     } catch (error) {
+//       console.error('Error playing alarm sound:', error);
+//     }
+//   };
+
+//   const triggerVibration = () => {
+//     if (Platform.OS === 'ios') {
+//       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+//     } else {
+//       Vibration.vibrate([500, 500, 500]);
+//     }
+//   };
+
+//   // Schedule notification with alarm
+//   const scheduleNotification = async (reminder: Reminder) => {
+//     try {
+//       const triggerDate = new Date(reminder.scheduledDateTime);
+//       if (triggerDate <= new Date()) {
+//         Alert.alert('Invalid Date', 'Cannot schedule notification for a past date');
+//         return;
+//       }
+      
+//       // Test the alarm immediately
+//       playAlarmSound(reminder.alarmSettings.soundType);
+//       triggerVibration();
+      
+//       // Schedule notification for the future time
+//       await Notifications.scheduleNotificationAsync({
+//         content: {
+//           title: `📋 ${reminder.title}`,
+//           body: reminder.description || `${reminder.reminderType} reminder`,
+//           data: { 
+//             reminderId: reminder.id,
+//             requiresConfirmation: reminder.requiresConfirmation
+//           },
+//           sound: 'alarm_sound',
+//         },
+//         trigger: triggerDate,
+//         channelId: 'alarm-reminders',
+//       });
+      
+//       Alert.alert(
+//         'Alarm Scheduled', 
+//         `You'll hear the alarm at ${triggerDate.toLocaleString()}\n\n` +
+//         `Sound: ${reminder.alarmSettings.soundType}\n` +
+//         `Volume: ${reminder.alarmSettings.volume}/10\n` +
+//         `Vibration: ${reminder.alarmSettings.vibrate ? 'ON' : 'OFF'}`
+//       );
+//     } catch (error) {
+//       console.error('Error scheduling notification:', error);
+//       Alert.alert('Error', 'Failed to schedule notification');
+//     }
+//   };
+
+//   const deleteReminder = async (reminderId: string) => {
+//     Alert.alert(
+//       'Delete Reminder',
+//       'Are you sure you want to delete this reminder?',
+//       [
+//         { text: 'Cancel', style: 'cancel' },
+//         {
+//           text: 'Delete',
+//           style: 'destructive',
+//           onPress: async () => {
+//             try {
+//               const token = await AsyncStorage.getItem('accessToken');
+//               if (!token) throw new Error('Not logged in');
+//               const res = await fetch(`https://elderlybackend.onrender.com/api/reminders/${reminderId}`, {
+//                 method: 'DELETE',
+//                 headers: {
+//                   'Authorization': `Bearer ${token}`,
+//                   'Content-Type': 'application/json'
+//                 }
+//               });
+//               if (res.ok) {
+//                 setReminders(prev => prev.filter(r => r.id !== reminderId));
+//                 Alert.alert('Success', 'Reminder deleted successfully');
+//               } else {
+//                 throw new Error('Failed to delete reminder');
+//               }
+//             } catch (error) {
+//               Alert.alert('Error', 'Failed to delete reminder');
+//             }
+//           }
+//         }
+//       ]
+//     );
+//   };
+
+//   const getPriorityColor = (priority: string) => {
+//     switch (priority) {
+//       case 'high': return '#e74c3c';
+//       case 'medium': return '#f39c12';
+//       case 'low': return '#27ae60';
+//       default: return '#95a5a6';
+//     }
+//   };
+
+//   const getTypeIcon = (type: string) => {
+//     switch (type) {
+//       case 'medication': return '💊';
+//       case 'appointment': return '🏥';
+//       case 'activity': return '🎯';
+//       case 'exercise': return '🏃‍♂️';
+//       case 'meal': return '🍽️';
+//       default: return '📋';
+//     }
+//   };
+
+//   const renderReminder = ({ item }: { item: Reminder }) => (
+//     <View style={styles.reminderCard}>
+//       <View style={styles.reminderHeader}>
+//         <View style={styles.reminderTitleRow}>
+//           <Text style={styles.typeIcon}>{getTypeIcon(item.reminderType)}</Text>
+//           <Text style={styles.reminderTitle}>{item.title}</Text>
+//           <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
+//             <Text style={styles.priorityText}>{item.priority.toUpperCase()}</Text>
+//           </View>
+//         </View>
+//       </View>
+//       {item.description ? (
+//         <Text style={styles.reminderDescription}>{item.description}</Text>
+//       ) : null}
+//       <View style={styles.reminderDetails}>
+//         <Text style={styles.detailText}>
+//           📅 {new Date(item.scheduledDateTime).toLocaleDateString()}
+//         </Text>
+//         <Text style={styles.detailText}>
+//           ⏰ {new Date(item.scheduledDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+//         </Text>
+//         {item.isRecurring && (
+//           <Text style={styles.detailText}>
+//             🔄 {item.recurrencePattern?.type} (every {item.recurrencePattern?.interval})
+//           </Text>
+//         )}
+//         <Text style={styles.detailText}>👤 {item.elderlyUser?.name}</Text>
+//         <Text style={styles.detailText}>👥 {item.group?.name}</Text>
+//       </View>
+//       <View style={styles.alarmInfo}>
+//         <Text style={styles.alarmText}>
+//           🔊 {item.alarmSettings.soundType} • Volume {item.alarmSettings.volume}/10
+//         </Text>
+//         {item.alarmSettings.vibrate && <Text style={styles.alarmText}>📳 Vibrate</Text>}
+//         {item.alarmSettings.snoozeEnabled && (
+//           <Text style={styles.alarmText}>💤 Snooze {item.alarmSettings.snoozeDuration}min</Text>
+//         )}
+//       </View>
+//       <View style={styles.actionButtons}>
+//         <TouchableOpacity style={styles.scheduleButton} onPress={() => scheduleNotification(item)}>
+//           <Text style={styles.buttonText}>🔊 Test & Schedule</Text>
+//         </TouchableOpacity>
+//         <TouchableOpacity style={styles.deleteButton} onPress={() => deleteReminder(item.id)}>
+//           <Text style={styles.buttonText}>🗑️ Delete</Text>
+//         </TouchableOpacity>
+//       </View>
+//     </View>
+//   );
+
+//   if (loading) {
+//     return (
+//       <View style={styles.loadingContainer}>
+//         <ActivityIndicator size="large" color="#3498db" />
+//         <Text style={styles.loadingText}>Loading reminders...</Text>
+//       </View>
+//     );
+//   }
+
+//   return (
+//     <SafeAreaView style={styles.container}>
+//       <View style={styles.header}>
+//         <Text style={styles.headerTitle}>My Reminders</Text>
+//         <Text style={styles.headerSubtitle}>{reminders.length} active reminders</Text>
+//       </View>
+//       <FlatList
+//         data={reminders}
+//         keyExtractor={item => item.id}
+//         renderItem={renderReminder}
+//         contentContainerStyle={styles.listContainer}
+//         refreshControl={
+//           <RefreshControl 
+//             refreshing={refreshing} 
+//             onRefresh={onRefresh}
+//             colors={['#3498db']}
+//             tintColor="#3498db"
+//           />
+//         }
+//         ListEmptyComponent={
+//           <View style={styles.emptyContainer}>
+//             <Text style={styles.emptyText}>📋 No reminders yet</Text>
+//             <Text style={styles.emptySubtext}>
+//               Create your first reminder to get started!
+//             </Text>
+//           </View>
+//         }
+//         showsVerticalScrollIndicator={false}
+//       />
+//     </SafeAreaView>
+//   );
+// }
+
+// const styles = StyleSheet.create({
+//   container: { flex: 1, backgroundColor: '#f8f9fa' },
+//   header: {
+//     backgroundColor: '#3498db',
+//     padding: 20,
+//     paddingTop: 15,
+//     borderBottomLeftRadius: 20,
+//     borderBottomRightRadius: 20
+//   },
+//   headerTitle: {
+//     fontSize: 24,
+//     fontWeight: 'bold',
+//     color: 'white',
+//     textAlign: 'center'
+//   },
+//   headerSubtitle: {
+//     fontSize: 16,
+//     color: 'rgba(255,255,255,0.9)',
+//     textAlign: 'center',
+//     marginTop: 5
+//   },
+//   listContainer: {
+//     padding: 15,
+//     paddingBottom: 30
+//   },
+//   reminderCard: {
+//     backgroundColor: 'white',
+//     borderRadius: 12,
+//     padding: 16,
+//     marginBottom: 15,
+//     shadowColor: '#000',
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 4,
+//     elevation: 3,
+//     borderLeftWidth: 4,
+//     borderLeftColor: '#3498db'
+//   },
+//   reminderHeader: {
+//     marginBottom: 10
+//   },
+//   reminderTitleRow: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'space-between'
+//   },
+//   typeIcon: {
+//     fontSize: 20,
+//     marginRight: 8
+//   },
+//   reminderTitle: {
+//     fontSize: 18,
+//     fontWeight: 'bold',
+//     color: '#2c3e50',
+//     flex: 1
+//   },
+//   priorityBadge: {
+//     paddingHorizontal: 8,
+//     paddingVertical: 4,
+//     borderRadius: 10,
+//     marginLeft: 8
+//   },
+//   priorityText: {
+//     color: 'white',
+//     fontSize: 10,
+//     fontWeight: 'bold'
+//   },
+//   reminderDescription: {
+//     fontSize: 14,
+//     color: '#7f8c8d',
+//     marginBottom: 12,
+//     lineHeight: 20
+//   },
+//   reminderDetails: {
+//     marginBottom: 10
+//   },
+//   detailText: {
+//     fontSize: 14,
+//     color: '#34495e',
+//     marginBottom: 4
+//   },
+//   alarmInfo: {
+//     flexDirection: 'row',
+//     flexWrap: 'wrap',
+//     marginBottom: 15
+//   },
+//   alarmText: {
+//     fontSize: 12,
+//     color: '#95a5a6',
+//     marginRight: 15,
+//     marginBottom: 2
+//   },
+//   actionButtons: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between'
+//   },
+//   scheduleButton: {
+//     backgroundColor: '#27ae60',
+//     paddingHorizontal: 16,
+//     paddingVertical: 8,
+//     borderRadius: 20,
+//     flex: 0.45
+//   },
+//   deleteButton: {
+//     backgroundColor: '#e74c3c',
+//     paddingHorizontal: 16,
+//     paddingVertical: 8,
+//     borderRadius: 20,
+//     flex: 0.45
+//   },
+//   buttonText: {
+//     color: 'white',
+//     fontSize: 14,
+//     fontWeight: '600',
+//     textAlign: 'center'
+//   },
+//   loadingContainer: {
+//     flex: 1,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//     backgroundColor: '#f8f9fa'
+//   },
+//   loadingText: {
+//     marginTop: 10,
+//     fontSize: 16,
+//     color: '#7f8c8d'
+//   },
+//   emptyContainer: {
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//     paddingTop: 100
+//   },
+//   emptyText: {
+//     fontSize: 22,
+//     color: '#7f8c8d',
+//     marginBottom: 10
+//   },
+//   emptySubtext: {
+//     fontSize: 16,
+//     color: '#95a5a6',
+//     textAlign: 'center'
+//   }
+// });
+
+
+
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -1209,11 +1738,14 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Platform,
-  Vibration
-} from 'react-native';
+  Dimensions,
+} from "react-native";
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
+import ElderlyTaskScreen from "./earlyTaskScreen"; // <-- Import your task page
 
-// Notification configuration
+const { width } = Dimensions.get("window");
+
+// Configure notification behavior
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -1222,98 +1754,52 @@ Notifications.setNotificationHandler({
   }),
 });
 
-interface Reminder {
-  id: string;
-  title: string;
-  description: string;
-  reminderType: string;
-  scheduledDateTime: string;
-  nextTrigger: string;
-  isRecurring: boolean;
-  recurrencePattern?: {
-    type: string;
-    interval: number;
-    daysOfWeek?: number[];
-    endDate: string;
-  };
-  alarmSettings: {
-    soundType: string;
-    volume: number;
-    vibrate: boolean;
-    snoozeEnabled: boolean;
-    snoozeDuration: number;
-  };
-  priority: string;
-  requiresConfirmation: boolean;
-  status: string;
-  elderlyUser: {
-    id: string;
-    name: string;
-  };
-  createdBy: {
-    id: string;
-    name: string;
-  };
-  group: {
-    id: string;
-    name: string;
-  };
-  createdAt: string;
-}
-
 export default function ReminderListScreen() {
-  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-
-  // Cleanup sound on unmount
-  useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
+  const [showTasks, setShowTasks] = useState(false); // <-- Toggle state
 
   const fetchReminders = useCallback(async () => {
-    setLoading(true);
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        Alert.alert('Authentication Error', 'Please login again');
-        setLoading(false);
-        setRefreshing(false);
+      const token = await AsyncStorage.getItem("accessToken");
+      const userId = await AsyncStorage.getItem("userId");
+
+      if (!token || !userId) {
+        Alert.alert("Authentication Error", "Please login again");
         return;
       }
-      
-      const res = await fetch(`https://elderlybackend.onrender.com/api/reminders`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+
+      const response = await fetch(
+        `https://elderlybackend.onrender.com/api/reminders`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         }
-      });
-      
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error('Invalid server response');
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
-      if (!res.ok || !data.success || !data.data || !Array.isArray(data.data.reminders)) {
+
+      const data = await response.json();
+
+      if (
+        data.success &&
+        data.data &&
+        data.data.reminders &&
+        Array.isArray(data.data.reminders)
+      ) {
+        setReminders(data.data.reminders);
+      } else {
         setReminders([]);
-        throw new Error(data.message || 'Failed to fetch reminders');
       }
-      
-      setReminders(data.data.reminders);
-      console.log('📋 Reminders fetched:', data.data.reminders.length);
-    } catch (error: any) {
-      console.error('[Reminder Fetch]', error);
-      Alert.alert('Error', error.message || 'Failed to fetch reminders');
-      setReminders([]);
+    } catch (error) {
+      console.error("Error fetching reminders:", error);
+      Alert.alert("Error", "Failed to fetch reminders. Please try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -1321,33 +1807,23 @@ export default function ReminderListScreen() {
   }, []);
 
   useEffect(() => {
-    fetchReminders();
-    requestNotificationPermissions();
-    setupNotificationChannel();
-  }, [fetchReminders]);
-
-  // Set up notification channel for Android
-  const setupNotificationChannel = async () => {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('alarm-reminders', {
-        name: 'Alarm Reminders',
-        importance: Notifications.AndroidImportance.HIGH,
-        sound: 'alarm_sound',
-        vibrationPattern: [0, 500, 500, 500],
-        enableLights: true,
-        enableVibrate: true,
-      });
+    if (!showTasks) {
+      fetchReminders();
+      requestNotificationPermissions();
     }
-  };
+  }, [fetchReminders, showTasks]);
 
   const requestNotificationPermissions = async () => {
     try {
       const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please enable notifications to receive reminders');
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Please enable notifications to receive reminders"
+        );
       }
     } catch (error) {
-      console.log('Notification permission error:', error);
+      console.error("Error requesting notification permissions:", error);
     }
   };
 
@@ -1356,369 +1832,537 @@ export default function ReminderListScreen() {
     fetchReminders();
   }, [fetchReminders]);
 
-  // Play alarm sound effect
-  const playAlarmSound = async (soundType: string) => {
-    try {
-      // Stop any currently playing sound
-      if (sound) {
-        await sound.stopAsync();
-        await sound.unloadAsync();
-      }
-      
-      let soundFile;
-      if (soundType === 'loud') {
-        soundFile = require('../../../assets/loud_alarm.mp3');
-      } else {
-        soundFile = require('../../../assets/gentle_alarm.mp3');
-      }
-      
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        soundFile,
-        { shouldPlay: true, isLooping: true }
-      );
-      setSound(newSound);
-      console.log('🔊 Playing alarm sound');
-    } catch (error) {
-      console.error('Error playing alarm sound:', error);
-    }
-  };
-
-  const triggerVibration = () => {
-    if (Platform.OS === 'ios') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else {
-      Vibration.vibrate([500, 500, 500]);
-    }
-  };
-
-  // Schedule notification with alarm
-  const scheduleNotification = async (reminder: Reminder) => {
+  const scheduleNotification = async (reminder) => {
     try {
       const triggerDate = new Date(reminder.scheduledDateTime);
-      if (triggerDate <= new Date()) {
-        Alert.alert('Invalid Date', 'Cannot schedule notification for a past date');
+      const now = new Date();
+
+      if (triggerDate <= now) {
+        Alert.alert(
+          "Invalid Date",
+          "Cannot schedule notification for past date"
+        );
         return;
       }
-      
-      // Test the alarm immediately
-      playAlarmSound(reminder.alarmSettings.soundType);
-      triggerVibration();
-      
-      // Schedule notification for the future time
+
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: `📋 ${reminder.title}`,
+          title: `${getTypeIcon(reminder.reminderType)} ${reminder.title}`,
           body: reminder.description || `${reminder.reminderType} reminder`,
-          data: { 
+          data: {
             reminderId: reminder.id,
-            requiresConfirmation: reminder.requiresConfirmation
+            requiresConfirmation: reminder.requiresConfirmation,
           },
-          sound: 'alarm_sound',
+          sound:
+            reminder.alarmSettings.soundType === "loud"
+              ? "default"
+              : "defaultCritical",
         },
         trigger: triggerDate,
-        channelId: 'alarm-reminders',
       });
-      
+
       Alert.alert(
-        'Alarm Scheduled', 
-        `You'll hear the alarm at ${triggerDate.toLocaleString()}\n\n` +
-        `Sound: ${reminder.alarmSettings.soundType}\n` +
-        `Volume: ${reminder.alarmSettings.volume}/10\n` +
-        `Vibration: ${reminder.alarmSettings.vibrate ? 'ON' : 'OFF'}`
+        "Success",
+        `Reminder scheduled for ${triggerDate.toLocaleString()}`
       );
     } catch (error) {
-      console.error('Error scheduling notification:', error);
-      Alert.alert('Error', 'Failed to schedule notification');
+      console.error("Error scheduling notification:", error);
+      Alert.alert("Error", "Failed to schedule notification");
     }
   };
 
-  const deleteReminder = async (reminderId: string) => {
+  const deleteReminder = async (reminderId) => {
     Alert.alert(
-      'Delete Reminder',
-      'Are you sure you want to delete this reminder?',
+      "Delete Reminder",
+      "Are you sure you want to delete this reminder?",
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Delete',
-          style: 'destructive',
+          text: "Delete",
+          style: "destructive",
           onPress: async () => {
             try {
-              const token = await AsyncStorage.getItem('accessToken');
-              if (!token) throw new Error('Not logged in');
-              const res = await fetch(`https://elderlybackend.onrender.com/api/reminders/${reminderId}`, {
-                method: 'DELETE',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
+              const token = await AsyncStorage.getItem("accessToken");
+              if (!token) {
+                throw new Error("No authentication token found");
+              }
+
+              const response = await fetch(
+                `https://elderlybackend.onrender.com/api/reminders/${reminderId}`,
+                {
+                  method: "DELETE",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                  },
                 }
-              });
-              if (res.ok) {
-                setReminders(prev => prev.filter(r => r.id !== reminderId));
-                Alert.alert('Success', 'Reminder deleted successfully');
+              );
+
+              if (response.ok) {
+                setReminders((prev) => prev.filter((r) => r.id !== reminderId));
+                Alert.alert("Success", "Reminder deleted successfully");
               } else {
-                throw new Error('Failed to delete reminder');
+                throw new Error("Failed to delete reminder");
               }
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete reminder');
+              Alert.alert("Error", "Failed to delete reminder");
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = (priority) => {
     switch (priority) {
-      case 'high': return '#e74c3c';
-      case 'medium': return '#f39c12';
-      case 'low': return '#27ae60';
-      default: return '#95a5a6';
+      case "high":
+        return "#FF5100";
+      case "medium":
+        return "#FF8C00";
+      case "low":
+        return "#009951";
+      default:
+        return "#C15C2D";
     }
   };
 
-  const getTypeIcon = (type: string) => {
+  const getTypeIcon = (type) => {
     switch (type) {
-      case 'medication': return '💊';
-      case 'appointment': return '🏥';
-      case 'activity': return '🎯';
-      case 'exercise': return '🏃‍♂️';
-      case 'meal': return '🍽️';
-      default: return '📋';
+      case "medication":
+        return "💊";
+      case "appointment":
+        return "🏥";
+      case "activity":
+        return "🎯";
+      case "exercise":
+        return "🏃‍♂️";
+      case "meal":
+        return "🍽️";
+      default:
+        return "📋";
     }
   };
 
-  const renderReminder = ({ item }: { item: Reminder }) => (
-    <View style={styles.reminderCard}>
+  const formatTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return "Today";
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      return "Tomorrow";
+    } else {
+      return date.toLocaleDateString([], {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+    }
+  };
+
+  const renderReminder = ({ item }) => (
+    <View
+      style={[
+        styles.reminderCard,
+        { borderLeftColor: getPriorityColor(item.priority) },
+      ]}
+    >
+      {/* Header */}
       <View style={styles.reminderHeader}>
-        <View style={styles.reminderTitleRow}>
+        <View style={styles.typeIconContainer}>
           <Text style={styles.typeIcon}>{getTypeIcon(item.reminderType)}</Text>
-          <Text style={styles.reminderTitle}>{item.title}</Text>
-          <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
-            <Text style={styles.priorityText}>{item.priority.toUpperCase()}</Text>
-          </View>
+        </View>
+        <View style={styles.reminderTitleContainer}>
+          <Text style={styles.reminderTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <Text style={styles.reminderType}>{item.reminderType}</Text>
+        </View>
+        <View
+          style={[
+            styles.priorityBadge,
+            { backgroundColor: getPriorityColor(item.priority) },
+          ]}
+        >
+          <Text style={styles.priorityText}>{item.priority.toUpperCase()}</Text>
         </View>
       </View>
-      {item.description ? (
-        <Text style={styles.reminderDescription}>{item.description}</Text>
-      ) : null}
-      <View style={styles.reminderDetails}>
-        <Text style={styles.detailText}>
-          📅 {new Date(item.scheduledDateTime).toLocaleDateString()}
+
+      {/* Description */}
+      {item.description && (
+        <Text style={styles.reminderDescription} numberOfLines={3}>
+          {item.description}
         </Text>
-        <Text style={styles.detailText}>
-          ⏰ {new Date(item.scheduledDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
-        {item.isRecurring && (
-          <Text style={styles.detailText}>
-            🔄 {item.recurrencePattern?.type} (every {item.recurrencePattern?.interval})
+      )}
+
+      {/* Date and Time */}
+      <View style={styles.dateTimeContainer}>
+        <View style={styles.dateTimeItem}>
+          <MaterialIcons name="calendar-today" size={20} color="#FF8C00" />
+          <Text style={styles.dateTimeText}>
+            {formatDate(item.scheduledDateTime)}
           </Text>
-        )}
-        <Text style={styles.detailText}>👤 {item.elderlyUser?.name}</Text>
-        <Text style={styles.detailText}>👥 {item.group?.name}</Text>
+        </View>
+        <View style={styles.dateTimeItem}>
+          <MaterialIcons name="access-time" size={20} color="#FF8C00" />
+          <Text style={styles.dateTimeText}>
+            {formatTime(item.scheduledDateTime)}
+          </Text>
+        </View>
       </View>
-      <View style={styles.alarmInfo}>
-        <Text style={styles.alarmText}>
-          🔊 {item.alarmSettings.soundType} • Volume {item.alarmSettings.volume}/10
-        </Text>
-        {item.alarmSettings.vibrate && <Text style={styles.alarmText}>📳 Vibrate</Text>}
-        {item.alarmSettings.snoozeEnabled && (
-          <Text style={styles.alarmText}>💤 Snooze {item.alarmSettings.snoozeDuration}min</Text>
+
+      {/* Additional Info */}
+      <View style={styles.additionalInfo}>
+        {item.isRecurring && (
+          <View style={styles.infoChip}>
+            <MaterialIcons name="repeat" size={16} color="#009951" />
+            <Text style={styles.infoChipText}>Recurring</Text>
+          </View>
+        )}
+        {item.alarmSettings?.vibrate && (
+          <View style={styles.infoChip}>
+            <MaterialIcons name="vibration" size={16} color="#C15C2D" />
+            <Text style={styles.infoChipText}>Vibrate</Text>
+          </View>
+        )}
+        {item.alarmSettings?.snoozeEnabled && (
+          <View style={styles.infoChip}>
+            <MaterialIcons name="snooze" size={16} color="#FF8C00" />
+            <Text style={styles.infoChipText}>Snooze</Text>
+          </View>
         )}
       </View>
+
+      {/* Action Buttons */}
       <View style={styles.actionButtons}>
-        <TouchableOpacity style={styles.scheduleButton} onPress={() => scheduleNotification(item)}>
-          <Text style={styles.buttonText}>🔊 Test & Schedule</Text>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.scheduleButton]}
+          onPress={() => scheduleNotification(item)}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons
+            name="notifications-active"
+            size={20}
+            color="#FFF3DD"
+          />
+          <Text style={styles.actionButtonText}>Schedule</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.deleteButton} onPress={() => deleteReminder(item.id)}>
-          <Text style={styles.buttonText}>🗑️ Delete</Text>
+
+        <TouchableOpacity
+          style={[styles.actionButton, styles.deleteButton]}
+          onPress={() => deleteReminder(item.id)}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="delete-outline" size={20} color="#FFF3DD" />
+          <Text style={styles.actionButtonText}>Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
+  const renderEmptyComponent = () => (
+    <View style={styles.emptyContainer}>
+      <View style={styles.emptyIconContainer}>
+        <MaterialIcons name="event-note" size={80} color="#C15C2D" />
+      </View>
+      <Text style={styles.emptyTitle}>No Reminders Yet</Text>
+      <Text style={styles.emptySubtext}>
+        Your reminders will appear here once they are created by your family
+        members or caregivers.
+      </Text>
+    </View>
+  );
+
+  // Main render
+  if (showTasks) {
+    // Show the task page instead
+    return <ElderlyTaskScreen />;
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
-        <Text style={styles.loadingText}>Loading reminders...</Text>
+        <ActivityIndicator size="large" color="#FF5100" />
+        <Text style={styles.loadingText}>Loading your reminders...</Text>
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Reminders</Text>
-        <Text style={styles.headerSubtitle}>{reminders.length} active reminders</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>My Reminders</Text>
+          <Text style={styles.headerSubtitle}>
+            {reminders.length}{" "}
+            {reminders.length === 1 ? "reminder" : "reminders"} active
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.headerIcon}
+          onPress={() => setShowTasks(true)}
+        >
+          <MaterialIcons name="assignment" size={28} color="#FFF3DD" />
+        </TouchableOpacity>
       </View>
+
+      {/* Reminders List */}
       <FlatList
         data={reminders}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         renderItem={renderReminder}
         contentContainerStyle={styles.listContainer}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#3498db']}
-            tintColor="#3498db"
+            colors={["#FF5100"]}
+            tintColor="#FF5100"
           />
         }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>📋 No reminders yet</Text>
-            <Text style={styles.emptySubtext}>
-              Create your first reminder to get started!
-            </Text>
-          </View>
-        }
+        ListEmptyComponent={renderEmptyComponent}
         showsVerticalScrollIndicator={false}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  container: {
+    flex: 1,
+    backgroundColor: "#FFF3DD",
+  },
   header: {
-    backgroundColor: '#3498db',
-    padding: 20,
-    paddingTop: 15,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20
+    backgroundColor: "#FF5100",
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  headerContent: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    textAlign: 'center'
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#FFF3DD",
+    marginBottom: 4,
   },
   headerSubtitle: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'center',
-    marginTop: 5
+    color: "rgba(255, 243, 221, 0.9)",
+    fontWeight: "500",
+  },
+  headerIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#009951",
+    alignItems: "center",
+    justifyContent: "center",
   },
   listContainer: {
-    padding: 15,
-    paddingBottom: 30
+    padding: 20,
+    paddingBottom: 120,
+  },
+  separator: {
+    height: 16,
   },
   reminderCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 15,
-    shadowColor: '#000',
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    borderLeftWidth: 6,
+    elevation: 3,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3498db'
+    shadowRadius: 8,
   },
   reminderHeader: {
-    marginBottom: 10
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 16,
   },
-  reminderTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
+  typeIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255, 140, 0, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
   },
   typeIcon: {
-    fontSize: 20,
-    marginRight: 8
+    fontSize: 24,
+  },
+  reminderTitleContainer: {
+    flex: 1,
+    marginRight: 12,
   },
   reminderTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    flex: 1
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#3E3F5B",
+    marginBottom: 4,
+    lineHeight: 24,
+  },
+  reminderType: {
+    fontSize: 14,
+    color: "#8AB2A6",
+    textTransform: "capitalize",
+    fontWeight: "500",
   },
   priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    marginLeft: 8
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: "flex-start",
   },
   priorityText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold'
+    color: "#FFF3DD",
+    fontSize: 12,
+    fontWeight: "bold",
   },
   reminderDescription: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    marginBottom: 12,
-    lineHeight: 20
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2C3930",
+    lineHeight: 22,
+    marginBottom: 16,
   },
-  reminderDetails: {
-    marginBottom: 10
+  dateTimeContainer: {
+    flexDirection: "row",
+    marginBottom: 16,
   },
-  detailText: {
-    fontSize: 14,
-    color: '#34495e',
-    marginBottom: 4
+  dateTimeItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 24,
+    backgroundColor: "rgba(255, 140, 0, 0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
-  alarmInfo: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 15
+  dateTimeText: {
+    fontSize: 16,
+    color: "#FF8C00",
+    fontWeight: "600",
+    marginLeft: 8,
   },
-  alarmText: {
+  additionalInfo: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 20,
+  },
+  infoChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 153, 81, 0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  infoChipText: {
     fontSize: 12,
-    color: '#95a5a6',
-    marginRight: 15,
-    marginBottom: 2
+    color: "#009951",
+    fontWeight: "500",
+    marginLeft: 4,
   },
   actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between'
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    flex: 0.48,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   scheduleButton: {
-    backgroundColor: '#27ae60',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    flex: 0.45
+    backgroundColor: "#009951",
   },
   deleteButton: {
-    backgroundColor: '#e74c3c',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    flex: 0.45
+    backgroundColor: "#FF5100",
   },
-  buttonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center'
+  actionButtonText: {
+    color: "#FFF3DD",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa'
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFF3DD",
   },
   loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#7f8c8d'
+    marginTop: 16,
+    fontSize: 18,
+    color: "#C15C2D",
+    fontWeight: "500",
   },
   emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 100
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 80,
+    paddingHorizontal: 40,
   },
-  emptyText: {
-    fontSize: 22,
-    color: '#7f8c8d',
-    marginBottom: 10
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(193, 92, 45, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#FF5100",
+    marginBottom: 12,
+    textAlign: "center",
   },
   emptySubtext: {
     fontSize: 16,
-    color: '#95a5a6',
-    textAlign: 'center'
-  }
+    color: "#C15C2D",
+    textAlign: "center",
+    lineHeight: 24,
+  },
 });
+
 
