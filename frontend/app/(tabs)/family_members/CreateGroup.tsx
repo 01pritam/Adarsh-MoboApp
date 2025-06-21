@@ -391,63 +391,80 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-  KeyboardAvoidingView,
-  RefreshControl
+  View
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 const { width, height } = Dimensions.get('window');
 
-// Interfaces
-interface Message {
-  _id: string;
-  content: string;
-  senderId: {
+interface GroupMember {
+  userId: {
     _id: string;
     name: string;
+    email: string;
     profilePicture?: string;
   };
-  createdAt: string;
-  messageType: 'text' | 'image' | 'file';
-  attachments?: Array<{
-    url: string;
-    type: string;
-    name: string;
-  }>;
-}
-
-interface GroupInfo {
+  role: 'admin' | 'member' | 'elderly' | 'family_member' | 'caregiver';
+  addedBy: string;
+  addedAt: string;
   _id: string;
-  name: string;
-  description?: string;
-  groupType: string;
-  members: Array<{
-    _id: string;
-    name: string;
-    role: string;
-    profilePicture?: string;
-  }>;
-  createdAt: string;
-  settings: {
-    allowMemberInvite: boolean;
-    requireApproval: boolean;
-    maxMembers: number;
-  };
 }
 
 interface Group {
   _id: string;
   name: string;
-  description?: string;
-  groupType: string;
-  members?: Array<{
+  description: string;
+  createdBy: {
     _id: string;
     name: string;
-    role: string;
-  }>;
+    email: string;
+  };
+  members: GroupMember[];
+  groupType: string;
+  isActive: boolean;
+  settings: {
+    allowMemberInvite: boolean;
+    requireApproval: boolean;
+    maxMembers: number;
+  };
   createdAt: string;
+  updatedAt: string;
+}
+
+interface Message {
+  _id: string;
+  groupId: string;
+  sender: {
+    _id: string;
+    name: string;
+    email: string;
+    profilePicture?: string;
+  };
+  content: {
+    text: string;
+    type: 'text' | 'image' | 'file' | 'audio' | 'video';
+    fileUrl?: string;
+    fileName?: string;
+    fileSize?: number;
+  };
+  replyTo?: {
+    _id: string;
+    content: { text: string };
+    sender: string;
+  };
+  reactions: {
+    userId: string;
+    emoji: string;
+    createdAt: string;
+  }[];
+  readBy: {
+    userId: string;
+    readAt: string;
+  }[];
+  mentions: string[];
+  isEdited: boolean;
+  editedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface GroupMessageProps {
@@ -457,44 +474,87 @@ interface GroupMessageProps {
 export default function GroupMessageScreen({ groupId: propGroupId }: GroupMessageProps) {
   console.log('🚀 GroupMessageScreen initialized with propGroupId:', propGroupId);
   
-  // Group management states
+  // ✅ FIXED: Add state for stored group ID
   const [storedGroupId, setStoredGroupId] = useState<string | null>(null);
   const [actualGroupId, setActualGroupId] = useState<string | null>(null);
-  const [showGroupOptions, setShowGroupOptions] = useState(false);
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
-  const [showJoinGroup, setShowJoinGroup] = useState(false);
-  const [availableGroups, setAvailableGroups] = useState<Group[]>([]);
-  const [loadingGroups, setLoadingGroups] = useState(false);
   
-  // Create group form states
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupDescription, setNewGroupDescription] = useState('');
-  const [newGroupType, setNewGroupType] = useState('family');
-  const [creatingGroup, setCreatingGroup] = useState(false);
+  // Group State
+  const [groupInfo, setGroupInfo] = useState<Group | null>(null);
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [currentUserRole, setCurrentUserRole] = useState<string>('');
   
-  // Join group states
-  const [groupCode, setGroupCode] = useState('');
-  const [joiningGroup, setJoiningGroup] = useState(false);
-
-  // Chat states
+  // Message State
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [sendingMessage, setSendingMessage] = useState(false);
-  const [groupInfo, setGroupInfo] = useState<GroupInfo | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  
+  // UI State
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
   const [showGroupDetails, setShowGroupDetails] = useState(false);
+  const [showMembersList, setShowMembersList] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isTyping, setIsTyping] = useState(false);
   
-  // Animation states
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [slideAnim] = useState(new Animated.Value(50));
-  
-  // Refs
   const flatListRef = useRef<FlatList>(null);
-  const textInputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInput>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  
+  const reactions = ['👍', '❤️', '😂', '😮', '😢', '😡', '👏', '🔥'];
 
-  // Initialize animations
+  // ✅ FIXED: First useEffect to get groupId from AsyncStorage
+  useEffect(() => {
+    console.log('🔄 useEffect triggered - getting groupId from AsyncStorage');
+    
+    const getGroupIdFromStorage = async () => {
+      try {
+        console.log('📱 Attempting to get groupId from AsyncStorage...');
+        const storedId = await AsyncStorage.getItem('groupId');
+        console.log('📱 Retrieved groupId from AsyncStorage:', storedId);
+        
+        // Use prop groupId if available, otherwise use stored groupId
+        const finalGroupId = propGroupId || storedId;
+        console.log('🎯 Final groupId to use:', finalGroupId);
+        
+        if (finalGroupId) {
+          setStoredGroupId(storedId);
+          setActualGroupId(finalGroupId);
+          console.log('✅ GroupId set successfully:', finalGroupId);
+        } else {
+          console.error('❌ No groupId found in props or AsyncStorage');
+          Alert.alert('Error', 'No group ID found. Please select a group first.');
+        }
+      } catch (error) {
+        console.error('💥 Error getting groupId from AsyncStorage:', error);
+        Alert.alert('Error', 'Failed to retrieve group information');
+      }
+    };
+
+    getGroupIdFromStorage();
+  }, [propGroupId]);
+
+  // ✅ FIXED: Second useEffect to initialize component when groupId is available
+  useEffect(() => {
+    console.log('🔄 useEffect triggered for component initialization - actualGroupId:', actualGroupId);
+    
+    if (actualGroupId) {
+      console.log('🎯 GroupId available, initializing component...');
+      initializeComponent();
+    } else {
+      console.log('⏳ Waiting for groupId to be available...');
+    }
+  }, [actualGroupId]);
+
+  // Animation effect
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -510,793 +570,856 @@ export default function GroupMessageScreen({ groupId: propGroupId }: GroupMessag
     ]).start();
   }, []);
 
-  // Get group ID and initialize
-  useEffect(() => {
-    console.log('🔄 useEffect triggered - getting groupId from AsyncStorage');
-    
-    const getGroupIdFromStorage = async () => {
-      try {
-        console.log('📱 Attempting to get groupId from AsyncStorage...');
-        const storedId = await AsyncStorage.getItem('groupId');
-        const userId = await AsyncStorage.getItem('userId');
-        
-        console.log('📱 Retrieved groupId from AsyncStorage:', storedId);
-        console.log('📱 Retrieved userId from AsyncStorage:', userId);
-        
-        if (userId) {
-          setCurrentUserId(userId);
-        }
-        
-        // Use prop groupId if available, otherwise use stored groupId
-        const finalGroupId = propGroupId || storedId;
-        console.log('🎯 Final groupId to use:', finalGroupId);
-        
-        if (finalGroupId) {
-          setStoredGroupId(storedId);
-          setActualGroupId(finalGroupId);
-          setShowGroupOptions(false);
-          console.log('✅ GroupId set successfully:', finalGroupId);
-        } else {
-          console.log('⚠️ No groupId found - showing group options');
-          setShowGroupOptions(true);
-          // Load available groups for joining
-          await loadAvailableGroups();
-        }
-      } catch (error) {
-        console.error('💥 Error getting groupId from AsyncStorage:', error);
-        setShowGroupOptions(true);
-      }
-    };
-
-    getGroupIdFromStorage();
-  }, [propGroupId]);
-
-  // Load group info and messages when groupId is available
-  useEffect(() => {
-    if (actualGroupId) {
-      console.log('🔄 Loading group info and messages for groupId:', actualGroupId);
-      loadGroupInfo();
-      loadMessages();
-    }
-  }, [actualGroupId]);
-
-  // Load available groups for joining
-  const loadAvailableGroups = async () => {
-    console.log('📋 Loading available groups...');
-    setLoadingGroups(true);
-    
+  const initializeComponent = async () => {
+    console.log('🔧 Starting component initialization with groupId:', actualGroupId);
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        console.error('❌ No access token found');
+      console.log('📱 Getting user data from AsyncStorage...');
+      const userId = await AsyncStorage.getItem('userId');
+      const userName = await AsyncStorage.getItem('userName');
+      const userEmail = await AsyncStorage.getItem('userEmail');
+      
+      console.log('👤 User data retrieved:', {
+        userId: userId ? userId.substring(0, 8) + '...' : 'null',
+        userName,
+        userEmail
+      });
+      
+      if (!userId) {
+        console.error('❌ No userId found in AsyncStorage');
+        Alert.alert('Error', 'User not authenticated. Please login again.');
         return;
       }
-
-      const response = await fetch(
-        'https://elderlybackend.onrender.com/api/group/available',
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableGroups(data.data?.groups || []);
-        console.log('✅ Available groups loaded:', data.data?.groups?.length || 0);
-      } else {
-        console.error('❌ Failed to load available groups');
-      }
+      
+      const userData = {
+        _id: userId,
+        name: userName,
+        email: userEmail
+      };
+      
+      setCurrentUser(userData);
+      console.log('✅ Current user set:', userData);
+      
+      console.log('📋 Loading group info...');
+      await loadGroupInfo();
+      
+      console.log('💬 Loading messages...');
+      await loadMessages();
+      
+      console.log('📊 Getting unread count...');
+      await getUnreadCount();
+      
+      console.log('🎉 Component initialization completed successfully');
     } catch (error) {
-      console.error('💥 Error loading available groups:', error);
-    } finally {
-      setLoadingGroups(false);
+      console.error('💥 Error during component initialization:', error);
+      console.error('💥 Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      Alert.alert('Initialization Error', 'Failed to initialize the chat. Please try again.');
     }
   };
 
-  // Create new group
-  const createGroup = async () => {
-    if (!newGroupName.trim()) {
-      Alert.alert('Error', 'Please enter a group name');
+  // ✅ FIXED: Load group information using actualGroupId
+  const loadGroupInfo = async () => {
+    console.log('📋 Starting loadGroupInfo with groupId:', actualGroupId);
+    
+    if (!actualGroupId) {
+      console.error('❌ No groupId available for loadGroupInfo');
+      Alert.alert('Error', 'Group ID not available');
       return;
     }
-
-    setCreatingGroup(true);
-    console.log('🆕 Creating new group:', newGroupName);
-
+    
     try {
+      console.log('🔑 Getting access token...');
       const token = await AsyncStorage.getItem('accessToken');
+      
       if (!token) {
+        console.error('❌ No access token found');
         throw new Error('Authentication token not found');
       }
-
-      const payload = {
-        name: newGroupName.trim(),
-        description: newGroupDescription.trim(),
-        groupType: newGroupType,
-        settings: {
-          allowMemberInvite: true,
-          requireApproval: false,
-          maxMembers: 50
-        }
+      
+      console.log('🔑 Token retrieved:', token.substring(0, 20) + '...');
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
       };
 
-      console.log('📤 Create group payload:', payload);
+      console.log('🔍 Loading group info for ID:', actualGroupId);
+      console.log('🌐 Making request to:', `https://elderlybackend.onrender.com/api/group/info/${actualGroupId}`);
+      console.log('📤 Request headers:', headers);
 
       const response = await fetch(
-        'https://elderlybackend.onrender.com/api/group/create',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
+        `https://elderlybackend.onrender.com/api/group/info/${actualGroupId}`,
+        { headers }
+      );
+
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response ok:', response.ok);
+      console.log('📥 Response headers:', JSON.stringify([...response.headers.entries()]));
+
+      const data = await response.json();
+      console.log('📥 Response data:', JSON.stringify(data, null, 2));
+
+      if (!response.ok) {
+        console.error('❌ API request failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          data
+        });
+        throw new Error(data.message || `HTTP ${response.status}: Failed to load group info`);
+      }
+
+      // Handle backend response structure
+      const group = data.group || data; // Try both possible structures
+      console.log('📋 Group data extracted:', {
+        id: group._id,
+        name: group.name,
+        membersCount: group.members?.length || 0,
+        createdBy: group.createdBy?.name || 'Unknown'
+      });
+
+      if (!group._id) {
+        console.error('❌ Invalid group data structure:', group);
+        throw new Error('Invalid group data received from server');
+      }
+
+      console.log('📋 Group info loaded successfully:', group.name);
+      console.log('👥 Total members:', group.members.length);
+
+      setGroupInfo(group);
+      setGroupMembers(group.members);
+
+      // Find current user's role in the group
+      console.log('🔍 Finding current user role...');
+      console.log('🔍 Current user ID:', currentUser?._id);
+      console.log('🔍 Group members:', group.members.map((m: GroupMember) => ({
+        id: m.userId._id,
+        name: m.userId.name,
+        role: m.role
+      })));
+
+      const currentUserMember = group.members.find(
+        (member: GroupMember) => {
+          console.log('🔍 Comparing:', member.userId._id, '===', currentUser?._id);
+          return member.userId._id === currentUser?._id;
         }
       );
 
-      const data = await response.json();
-      console.log('📥 Create group response:', data);
-
-      if (response.ok && data.success) {
-        const newGroup = data.data.group;
-        console.log('✅ Group created successfully:', newGroup._id);
-
-        // Store the new group ID
-        await AsyncStorage.setItem('groupId', newGroup._id);
-        setActualGroupId(newGroup._id);
-        setShowGroupOptions(false);
-        setShowCreateGroup(false);
-        
-        // Reset form
-        setNewGroupName('');
-        setNewGroupDescription('');
-        setNewGroupType('family');
-
-        Alert.alert('Success', `Group "${newGroup.name}" created successfully!`);
+      if (currentUserMember) {
+        setCurrentUserRole(currentUserMember.role);
+        console.log('🎭 Current user role found:', currentUserMember.role);
       } else {
-        throw new Error(data.message || 'Failed to create group');
+        console.warn('⚠️ Current user not found in group members');
+        console.log('⚠️ Available member IDs:', group.members.map((m: GroupMember) => m.userId._id));
+        console.log('⚠️ Looking for user ID:', currentUser?._id);
       }
-    } catch (error) {
-      console.error('💥 Error creating group:', error);
-      Alert.alert('Error', error.message || 'Failed to create group');
-    } finally {
-      setCreatingGroup(false);
+
+      // Store group data in AsyncStorage
+      console.log('💾 Storing group data in AsyncStorage...');
+      await AsyncStorage.multiSet([
+        ['groupInfo', JSON.stringify(group)],
+        ['groupMembers', JSON.stringify(group.members)],
+        ['userRole', currentUserMember?.role || '']
+      ]);
+
+      console.log('✅ Group info stored in AsyncStorage successfully');
+
+    } catch (error: any) {
+      console.error('💥 Error in loadGroupInfo:', error);
+      console.error('💥 Error message:', error.message);
+      console.error('💥 Error stack:', error.stack);
+      
+      if (error.message.includes('Network')) {
+        Alert.alert('Network Error', 'Please check your internet connection and try again.');
+      } else if (error.message.includes('401') || error.message.includes('403')) {
+        Alert.alert('Authentication Error', 'Please login again.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to load group information');
+      }
     }
   };
 
-  // Join existing group
-  const joinGroup = async (groupId: string) => {
-    setJoiningGroup(true);
-    console.log('🤝 Joining group:', groupId);
-
-    try {
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
-
-      const response = await fetch(
-        `https://elderlybackend.onrender.com/api/group/${groupId}/join`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      const data = await response.json();
-      console.log('📥 Join group response:', data);
-
-      if (response.ok && data.success) {
-        console.log('✅ Successfully joined group');
-
-        // Store the group ID
-        await AsyncStorage.setItem('groupId', groupId);
-        setActualGroupId(groupId);
-        setShowGroupOptions(false);
-        setShowJoinGroup(false);
-
-        Alert.alert('Success', 'Successfully joined the group!');
-      } else {
-        throw new Error(data.message || 'Failed to join group');
-      }
-    } catch (error) {
-      console.error('💥 Error joining group:', error);
-      Alert.alert('Error', error.message || 'Failed to join group');
-    } finally {
-      setJoiningGroup(false);
+  // Get auth headers
+  const getAuthHeaders = async () => {
+    console.log('🔑 Getting auth headers...');
+    const token = await AsyncStorage.getItem('accessToken');
+    
+    if (!token) {
+      console.error('❌ No token available for auth headers');
+      throw new Error('Authentication token not found');
     }
+    
+    console.log('🔑 Auth headers prepared with token:', token.substring(0, 20) + '...');
+    return {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
   };
 
-  // Join group by code
-  const joinGroupByCode = async () => {
-    if (!groupCode.trim()) {
-      Alert.alert('Error', 'Please enter a group code');
+  // ✅ FIXED: Load messages using actualGroupId
+  const loadMessages = async (page = 1, append = false) => {
+    console.log(`💬 Starting loadMessages - page: ${page}, append: ${append}, groupId: ${actualGroupId}`);
+    
+    if (!actualGroupId) {
+      console.error('❌ No groupId available for loadMessages');
       return;
     }
-
-    setJoiningGroup(true);
-    console.log('🔑 Joining group by code:', groupCode);
-
+    
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        throw new Error('Authentication token not found');
+      if (!append) {
+        console.log('🔄 Setting loading state to true');
+        setLoading(true);
       }
-
-      const response = await fetch(
-        'https://elderlybackend.onrender.com/api/group/join-by-code',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ code: groupCode.trim() })
-        }
-      );
-
+      
+      console.log('🔑 Getting auth headers for messages...');
+      const headers = await getAuthHeaders();
+      
+      const url = `https://elderlybackend.onrender.com/api/groupmsg/${actualGroupId}/messages?page=${page}&limit=50`;
+      console.log('🌐 Making messages request to:', url);
+      console.log('📤 Request headers:', headers);
+      
+      const response = await fetch(url, { headers });
+      
+      console.log('📥 Messages response status:', response.status);
+      console.log('📥 Messages response ok:', response.ok);
+      
       const data = await response.json();
-      console.log('📥 Join by code response:', data);
-
-      if (response.ok && data.success) {
-        const group = data.data.group;
-        console.log('✅ Successfully joined group by code');
-
-        // Store the group ID
-        await AsyncStorage.setItem('groupId', group._id);
-        setActualGroupId(group._id);
-        setShowGroupOptions(false);
-        setShowJoinGroup(false);
-        setGroupCode('');
-
-        Alert.alert('Success', `Successfully joined "${group.name}"!`);
-      } else {
-        throw new Error(data.message || 'Invalid group code');
+      console.log('📥 Messages response data structure:', {
+        success: data.success,
+        dataExists: !!data.data,
+        messagesCount: data.data?.messages?.length || 0,
+        paginationExists: !!data.data?.pagination
+      });
+      
+      if (!response.ok) {
+        console.error('❌ Messages API request failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          data
+        });
+        throw new Error(data.message || `HTTP ${response.status}: Failed to load messages`);
       }
-    } catch (error) {
-      console.error('💥 Error joining group by code:', error);
-      Alert.alert('Error', error.message || 'Invalid group code');
+      
+      const messagesData = data.data?.messages || data.messages || [];
+      const paginationData = data.data?.pagination || {};
+      
+      console.log('📨 Messages loaded:', messagesData.length);
+      console.log('📊 Pagination data:', paginationData);
+      
+      if (append) {
+        console.log('➕ Appending messages to existing list');
+        setMessages(prev => {
+          console.log('📝 Previous messages count:', prev.length);
+          console.log('📝 New messages count:', messagesData.length);
+          const combined = [...prev, ...messagesData];
+          console.log('📝 Combined messages count:', combined.length);
+          return combined;
+        });
+      } else {
+        console.log('🔄 Replacing messages list');
+        setMessages(messagesData);
+      }
+      
+      setCurrentPage(paginationData.currentPage || page);
+      setTotalPages(paginationData.totalPages || 1);
+      setHasMoreMessages(paginationData.hasNext || false);
+      
+      console.log('📊 Pagination state updated:', {
+        currentPage: paginationData.currentPage || page,
+        totalPages: paginationData.totalPages || 1,
+        hasMore: paginationData.hasNext || false
+      });
+      
+    } catch (error: any) {
+      console.error('💥 Error in loadMessages:', error);
+      console.error('💥 Error message:', error.message);
+      console.error('💥 Error stack:', error.stack);
+      
+      if (error.message.includes('Network')) {
+        Alert.alert('Network Error', 'Failed to load messages. Please check your connection.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to load messages');
+      }
     } finally {
-      setJoiningGroup(false);
-    }
-  };
-
-  // Load group information
-  const loadGroupInfo = async () => {
-    if (!actualGroupId) return;
-
-    try {
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        console.error('❌ No access token found');
-        return;
-      }
-
-      console.log('📋 Loading group info for groupId:', actualGroupId);
-
-      const response = await fetch(
-        `https://elderlybackend.onrender.com/api/group/${actualGroupId}`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data?.group) {
-          setGroupInfo(data.data.group);
-          console.log('✅ Group info loaded:', data.data.group.name);
-        }
-      } else {
-        console.error('❌ Failed to load group info');
-      }
-    } catch (error) {
-      console.error('💥 Error loading group info:', error);
-    }
-  };
-
-  // Load messages
-  const loadMessages = async () => {
-    if (!actualGroupId) return;
-
-    try {
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        console.error('❌ No access token found');
-        return;
-      }
-
-      console.log('💬 Loading messages for groupId:', actualGroupId);
-
-      const response = await fetch(
-        `https://elderlybackend.onrender.com/api/group/${actualGroupId}/messages`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data?.messages) {
-          setMessages(data.data.messages.reverse()); // Reverse to show newest at bottom
-          console.log('✅ Messages loaded:', data.data.messages.length);
-          
-          // Scroll to bottom after loading messages
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        }
-      } else {
-        console.error('❌ Failed to load messages');
-      }
-    } catch (error) {
-      console.error('💥 Error loading messages:', error);
-    } finally {
+      console.log('🏁 loadMessages finally block - setting loading states to false');
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  // Send message
+  // ✅ FIXED: Send message using actualGroupId
   const sendMessage = async () => {
-    if (!newMessage.trim() || !actualGroupId || sendingMessage) return;
-
-    const messageText = newMessage.trim();
-    setNewMessage('');
-    setSendingMessage(true);
-
+    console.log('📤 Starting sendMessage with groupId:', actualGroupId);
+    console.log('📝 Message content:', newMessage.trim());
+    console.log('↩️ Replying to:', replyingTo?._id || 'none');
+    
+    if (!actualGroupId) {
+      console.error('❌ No groupId available for sendMessage');
+      Alert.alert('Error', 'Group ID not available');
+      return;
+    }
+    
+    if (!newMessage.trim() && !replyingTo) {
+      console.log('⚠️ No message content to send');
+      return;
+    }
+    
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
-
-      console.log('📤 Sending message:', messageText);
-
-      const response = await fetch(
-        `https://elderlybackend.onrender.com/api/group/${actualGroupId}/messages`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            content: messageText,
-            messageType: 'text'
-          })
+      console.log('🔑 Getting auth headers for send message...');
+      const headers = await getAuthHeaders();
+      
+      const payload: any = {
+        content: {
+          text: newMessage.trim(),
+          type: 'text'
         }
-      );
+      };
+      
+      if (replyingTo) {
+        payload.replyTo = replyingTo._id;
+        console.log('↩️ Adding reply reference:', replyingTo._id);
+      }
+      
+      console.log('📤 Send message payload:', JSON.stringify(payload, null, 2));
+      
+      const url = `https://elderlybackend.onrender.com/api/groupmsg/${actualGroupId}/messages`;
+      console.log('🌐 Sending message to:', url);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      
+      console.log('📥 Send message response status:', response.status);
+      console.log('📥 Send message response ok:', response.ok);
+      
+      const data = await response.json();
+      console.log('📥 Send message response data:', JSON.stringify(data, null, 2));
+      
+      if (!response.ok) {
+        console.error('❌ Send message API request failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          data
+        });
+        throw new Error(data.message || `HTTP ${response.status}: Failed to send message`);
+      }
+      
+      console.log('✅ Message sent successfully');
+      
+      const sentMessage = data.data?.message || data.message;
+      console.log('📨 Sent message data:', {
+        id: sentMessage._id,
+        text: sentMessage.content.text,
+        sender: sentMessage.sender.name
+      });
+      
+      // Add message to top of list
+      setMessages(prev => {
+        console.log('📝 Adding message to list - previous count:', prev.length);
+        const updated = [sentMessage, ...prev];
+        console.log('📝 Updated messages count:', updated.length);
+        return updated;
+      });
+      
+      setNewMessage('');
+      setReplyingTo(null);
+      console.log('🧹 Cleared input and reply state');
+      
+      // Scroll to bottom
+      setTimeout(() => {
+        console.log('📜 Scrolling to top of messages');
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }, 100);
+      
+    } catch (error: any) {
+      console.error('💥 Error in sendMessage:', error);
+      console.error('💥 Error message:', error.message);
+      console.error('💥 Error stack:', error.stack);
+      
+      if (error.message.includes('Network')) {
+        Alert.alert('Network Error', 'Failed to send message. Please check your connection.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to send message');
+      }
+    }
+  };
 
+  // Edit message - FIXED API endpoint
+  const editMessage = async (messageId: string, newText: string) => {
+    console.log('✏️ Starting editMessage...');
+    console.log('📝 Message ID:', messageId);
+    console.log('📝 New text:', newText);
+    
+    try {
+      const headers = await getAuthHeaders();
+      
+      const payload = {
+        content: { text: newText }
+      };
+      
+      console.log('📤 Edit message payload:', JSON.stringify(payload, null, 2));
+      
+      const url = `https://elderlybackend.onrender.com/api/groupmsg/messages/${messageId}`;
+      console.log('🌐 Editing message at:', url);
+      
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      
+      console.log('📥 Edit message response status:', response.status);
+      
+      const data = await response.json();
+      console.log('📥 Edit message response data:', JSON.stringify(data, null, 2));
+      
+      if (!response.ok) {
+        console.error('❌ Edit message API request failed:', {
+          status: response.status,
+          data
+        });
+        throw new Error(data.message || 'Failed to edit message');
+      }
+      
+      console.log('✅ Message edited successfully');
+      
+      // Update message in list
+      const updatedMessage = data.data?.message || data.message;
+      setMessages(prev => {
+        const updated = prev.map(msg => 
+          msg._id === messageId ? { ...msg, ...updatedMessage } : msg
+        );
+        console.log('📝 Updated message in list');
+        return updated;
+      });
+      
+      setEditingMessage(null);
+      console.log('🧹 Cleared editing state');
+      
+    } catch (error: any) {
+      console.error('💥 Error in editMessage:', error);
+      Alert.alert('Error', error.message || 'Failed to edit message');
+    }
+  };
+
+  // Delete message - FIXED API endpoint
+  const deleteMessage = async (messageId: string) => {
+    console.log('🗑️ Starting deleteMessage for ID:', messageId);
+    
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        { 
+          text: 'Cancel', 
+          style: 'cancel',
+          onPress: () => console.log('❌ Delete cancelled by user')
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            console.log('🗑️ User confirmed delete');
+            try {
+              const headers = await getAuthHeaders();
+              
+              const url = `https://elderlybackend.onrender.com/api/groupmsg/messages/${messageId}`;
+              console.log('🌐 Deleting message at:', url);
+              
+              const response = await fetch(url, { 
+                method: 'DELETE', 
+                headers 
+              });
+              
+              console.log('📥 Delete message response status:', response.status);
+              
+              if (response.ok) {
+                console.log('✅ Message deleted successfully');
+                setMessages(prev => {
+                  const filtered = prev.filter(msg => msg._id !== messageId);
+                  console.log('📝 Removed message from list - remaining:', filtered.length);
+                  return filtered;
+                });
+              } else {
+                const data = await response.json();
+                console.error('❌ Delete message failed:', data);
+                throw new Error(data.message || 'Failed to delete message');
+              }
+            } catch (error: any) {
+              console.error('💥 Error in deleteMessage:', error);
+              Alert.alert('Error', 'Failed to delete message');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Add reaction - FIXED API endpoint
+  const addReaction = async (messageId: string, emoji: string) => {
+    console.log('😀 Starting addReaction...');
+    console.log('📝 Message ID:', messageId);
+    console.log('😀 Emoji:', emoji);
+    
+    try {
+      const headers = await getAuthHeaders();
+      
+      const payload = { emoji };
+      console.log('📤 Add reaction payload:', JSON.stringify(payload));
+      
+      const url = `https://elderlybackend.onrender.com/api/groupmsg/messages/${messageId}/reactions`;
+      console.log('🌐 Adding reaction at:', url);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      
+      console.log('📥 Add reaction response status:', response.status);
+      
       if (response.ok) {
+        console.log('✅ Reaction added successfully');
+        console.log('🔄 Reloading messages to get updated reactions');
+        await loadMessages(1);
+      } else {
         const data = await response.json();
-        if (data.success && data.data?.message) {
-          setMessages(prev => [...prev, data.data.message]);
-          console.log('✅ Message sent successfully');
-          
-          // Scroll to bottom after sending message
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
+        console.error('❌ Add reaction failed:', data);
+        throw new Error(data.message || 'Failed to add reaction');
+      }
+      
+      setShowReactionPicker(null);
+      console.log('🧹 Cleared reaction picker');
+      
+    } catch (error: any) {
+      console.error('💥 Error in addReaction:', error);
+      Alert.alert('Error', 'Failed to add reaction');
+    }
+  };
+
+  // ✅ FIXED: Mark messages as read using actualGroupId
+  const markAsRead = async (messageId?: string) => {
+    console.log('👁️ Starting markAsRead with groupId:', actualGroupId);
+    console.log('📝 Message ID:', messageId || 'all messages');
+    
+    if (!actualGroupId) {
+      console.error('❌ No groupId available for markAsRead');
+      return;
+    }
+    
+    try {
+      const headers = await getAuthHeaders();
+      const url = messageId 
+        ? `https://elderlybackend.onrender.com/api/groupmsg/messages/${messageId}/read`
+        : `https://elderlybackend.onrender.com/api/groupmsg/${actualGroupId}/messages/read-all`;
+      
+      console.log('🌐 Marking as read at:', url);
+      
+      const response = await fetch(url, { method: 'POST', headers });
+      
+      console.log('📥 Mark as read response status:', response.status);
+      
+      if (response.ok) {
+        console.log('✅ Messages marked as read successfully');
+        if (!messageId) {
+          setUnreadCount(0);
+          console.log('📊 Reset unread count to 0');
         }
       } else {
-        throw new Error('Failed to send message');
+        const data = await response.json();
+        console.error('❌ Mark as read failed:', data);
       }
-    } catch (error) {
-      console.error('💥 Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message');
-      // Restore message if sending failed
-      setNewMessage(messageText);
-    } finally {
-      setSendingMessage(false);
+      
+    } catch (error: any) {
+      console.error('💥 Error in markAsRead:', error);
     }
   };
 
-  // Refresh messages
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadMessages();
+  // ✅ FIXED: Get unread count using actualGroupId
+  const getUnreadCount = async () => {
+    console.log('📊 Starting getUnreadCount with groupId:', actualGroupId);
+    
+    if (!actualGroupId) {
+      console.error('❌ No groupId available for getUnreadCount');
+      return;
+    }
+    
+    try {
+      const headers = await getAuthHeaders();
+      
+      const url = `https://elderlybackend.onrender.com/api/groupmsg/${actualGroupId}/messages/unread-count`;
+      console.log('🌐 Getting unread count from:', url);
+      
+      const response = await fetch(url, { headers });
+      
+      console.log('📥 Unread count response status:', response.status);
+      
+      const data = await response.json();
+      console.log('📥 Unread count response data:', JSON.stringify(data, null, 2));
+      
+      if (response.ok) {
+        const count = data.data?.unreadCount || data.unreadCount || 0;
+        console.log('📊 Unread count retrieved:', count);
+        setUnreadCount(count);
+      } else {
+        console.error('❌ Get unread count failed:', data);
+      }
+    } catch (error: any) {
+      console.error('💥 Error in getUnreadCount:', error);
+    }
   };
 
-  // Format timestamp
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffInHours < 168) { // 7 days
-      return date.toLocaleDateString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  // Load more messages
+  const loadMoreMessages = () => {
+    console.log('📜 loadMoreMessages called');
+    console.log('📊 hasMoreMessages:', hasMoreMessages);
+    console.log('📊 loading:', loading);
+    console.log('📊 currentPage:', currentPage);
+    
+    if (hasMoreMessages && !loading) {
+      console.log('📜 Loading more messages - page:', currentPage + 1);
+      loadMessages(currentPage + 1, true);
     } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      console.log('📜 Not loading more messages - conditions not met');
     }
   };
 
-  // Render message item
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isOwnMessage = item.senderId._id === currentUserId;
+  // Format time
+  const formatTime = (dateString: string) => {
+    console.log('🕐 Formatting time for:', dateString);
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffInMs = now.getTime() - date.getTime();
+      const diffInHours = diffInMs / (1000 * 60 * 60);
+      const diffInDays = diffInHours / 24;
+      
+      let formatted;
+      if (diffInHours < 1) {
+        formatted = 'now';
+      } else if (diffInHours < 24) {
+        formatted = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else if (diffInDays < 7) {
+        formatted = date.toLocaleDateString([], { weekday: 'short' });
+      } else {
+        formatted = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      }
+      
+      console.log('🕐 Formatted time:', formatted);
+      return formatted;
+    } catch (error) {
+      console.error('💥 Error formatting time:', error);
+      return 'Invalid date';
+    }
+  };
+
+  // Get member color by role - supports all backend roles
+  const getMemberRoleColor = (role: string) => {
+    console.log('🎨 Getting color for role:', role);
+    const colors = {
+      'admin': '#FF6B6B',
+      'elderly': '#4ECDC4',
+      'family_member': '#45B7D1',
+      'caregiver': '#96CEB4',
+      'member': '#FFEAA7'
+    };
+    const color = colors[role as keyof typeof colors] || '#DDA0DD';
+    console.log('🎨 Role color:', color);
+    return color;
+  };
+
+  // Get role display name
+  const getRoleDisplayName = (role: string) => {
+    console.log('📛 Getting display name for role:', role);
+    const displayNames = {
+      'family_member': 'Family',
+      'caregiver': 'Caregiver',
+      'elderly': 'Elderly',
+      'admin': 'Admin',
+      'member': 'Member'
+    };
+    const displayName = displayNames[role as keyof typeof displayNames] || role;
+    console.log('📛 Role display name:', displayName);
+    return displayName;
+  };
+
+  // Get user initials
+  const getUserInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
+  };
+
+  // Render user avatar
+  const renderAvatar = (user: any, size: number = 40) => {
+    if (user.profilePicture) {
+      return (
+        <Image 
+          source={{ uri: user.profilePicture }} 
+          style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
+        />
+      );
+    }
     
     return (
-      <Animated.View
-        style={[
-          styles.messageContainer,
-          isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer,
-          { opacity: fadeAnim }
-        ]}
-      >
-        {!isOwnMessage && (
-          <View style={styles.senderInfo}>
-            <View style={styles.avatarContainer}>
-              {item.senderId.profilePicture ? (
-                <Image source={{ uri: item.senderId.profilePicture }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>
-                    {item.senderId.name.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.senderName}>{item.senderId.name}</Text>
+      <View style={[styles.avatarPlaceholder, { 
+        width: size, 
+        height: size, 
+        borderRadius: size / 2,
+        backgroundColor: getMemberRoleColor(currentUserRole)
+      }]}>
+        <Text style={[styles.avatarText, { fontSize: size * 0.4 }]}>
+          {getUserInitials(user.name || 'U')}
+        </Text>
+      </View>
+    );
+  };
+
+  // Render typing indicator
+  const renderTypingIndicator = () => {
+    if (!isTyping) return null;
+    
+    return (
+      <View style={styles.typingContainer}>
+        <View style={styles.typingBubble}>
+          <View style={styles.typingDots}>
+            <View style={[styles.typingDot, styles.typingDot1]} />
+            <View style={[styles.typingDot, styles.typingDot2]} />
+            <View style={[styles.typingDot, styles.typingDot3]} />
           </View>
-        )}
-        
-        <View style={[
-          styles.messageBubble,
-          isOwnMessage ? styles.ownMessageBubble : styles.otherMessageBubble
-        ]}>
-          <Text style={[
-            styles.messageText,
-            isOwnMessage ? styles.ownMessageText : styles.otherMessageText
-          ]}>
-            {item.content}
-          </Text>
-          <Text style={[
-            styles.messageTime,
-            isOwnMessage ? styles.ownMessageTime : styles.otherMessageTime
-          ]}>
-            {formatTimestamp(item.createdAt)}
-          </Text>
         </View>
-      </Animated.View>
+      </View>
     );
   };
 
-  // Render group options screen
-  const renderGroupOptionsScreen = () => {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-        
-        <Animated.View style={[styles.groupOptionsContainer, { opacity: fadeAnim }]}>
-          {/* Header */}
-          <View style={styles.groupOptionsHeader}>
-            <LinearGradient
-              colors={['#667eea', '#764ba2']}
-              style={styles.logoContainer}
-            >
-              <Text style={styles.logoEmoji}>👥</Text>
-            </LinearGradient>
-            <Text style={styles.groupOptionsTitle}>Welcome to Group Chat</Text>
-            <Text style={styles.groupOptionsSubtitle}>
-              Connect with your family and caregivers in a secure group environment
-            </Text>
-          </View>
-
-          {/* Options */}
-          <View style={styles.optionsContainer}>
-            <TouchableOpacity
-              style={styles.optionCard}
-              onPress={() => setShowCreateGroup(true)}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={['#667eea', '#764ba2']}
-                style={styles.optionIcon}
-              >
-                <MaterialIcons name="add" size={24} color="white" />
-              </LinearGradient>
-              <View style={styles.optionContent}>
-                <Text style={styles.optionTitle}>Create New Group</Text>
-                <Text style={styles.optionDescription}>
-                  Start a new group for your family or care team
-                </Text>
-              </View>
-              <MaterialIcons name="arrow-forward-ios" size={16} color="#94a3b8" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.optionCard}
-              onPress={() => setShowJoinGroup(true)}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={['#10b981', '#059669']}
-                style={styles.optionIcon}
-              >
-                <MaterialIcons name="group-add" size={24} color="white" />
-              </LinearGradient>
-              <View style={styles.optionContent}>
-                <Text style={styles.optionTitle}>Join Existing Group</Text>
-                <Text style={styles.optionDescription}>
-                  Join a group using an invitation code or from available groups
-                </Text>
-              </View>
-              <MaterialIcons name="arrow-forward-ios" size={16} color="#94a3b8" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Available Groups Preview */}
-          {availableGroups.length > 0 && (
-            <View style={styles.availableGroupsPreview}>
-              <MaterialIcons name="groups" size={24} color="#10b981" />
-              <Text style={styles.previewTitle}>Available Groups</Text>
-              <Text style={styles.previewSubtitle}>
-                {availableGroups.length} group{availableGroups.length !== 1 ? 's' : ''} available to join
-              </Text>
-            </View>
-          )}
-        </Animated.View>
-
-        {/* Create Group Modal */}
-        {renderCreateGroupModal()}
-
-        {/* Join Group Modal */}
-        {renderJoinGroupModal()}
-      </SafeAreaView>
-    );
-  };
-
-  // Render create group modal
-  const renderCreateGroupModal = () => {
+  // Render group details modal
+  const renderGroupDetailsModal = () => {
+    console.log('🖼️ Rendering group details modal');
     return (
       <Modal
-        visible={showCreateGroup}
+        visible={showGroupDetails}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowCreateGroup(false)}
+        onRequestClose={() => {
+          console.log('🚪 Closing group details modal');
+          setShowGroupDetails(false);
+        }}
       >
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Create New Group</Text>
+            <Text style={styles.modalTitle}>Group Details</Text>
             <TouchableOpacity 
-              onPress={() => setShowCreateGroup(false)}
+              onPress={() => {
+                console.log('❌ Group details modal close button pressed');
+                setShowGroupDetails(false);
+              }}
               style={styles.closeButton}
             >
-              <MaterialIcons name="close" size={24} color="#64748b" />
+              <Text style={styles.closeButtonText}>✕</Text>
             </TouchableOpacity>
           </View>
-
+          
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.formContainer}>
-              {/* Group Name */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Group Name *</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter group name (e.g., Smith Family)"
-                  value={newGroupName}
-                  onChangeText={setNewGroupName}
-                  maxLength={50}
-                  placeholderTextColor="#94a3b8"
-                />
-              </View>
-
-              {/* Group Description */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Description</Text>
-                <TextInput
-                  style={[styles.textInput, styles.textArea]}
-                  placeholder="Describe your group's purpose..."
-                  value={newGroupDescription}
-                  onChangeText={setNewGroupDescription}
-                  multiline
-                  numberOfLines={3}
-                  maxLength={200}
-                  placeholderTextColor="#94a3b8"
-                />
-              </View>
-
-              {/* Group Type */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Group Type</Text>
-                <View style={styles.radioGroup}>
-                  {[
-                    { value: 'family', label: 'Family Group', icon: 'family-restroom' },
-                    { value: 'care', label: 'Care Team', icon: 'local-hospital' },
-                    { value: 'community', label: 'Community', icon: 'location-city' }
-                  ].map((type) => (
-                    <TouchableOpacity
-                      key={type.value}
-                      style={[
-                        styles.radioOption,
-                        newGroupType === type.value && styles.radioOptionSelected
-                      ]}
-                      onPress={() => setNewGroupType(type.value)}
-                    >
-                      <MaterialIcons 
-                        name={type.icon} 
-                        size={20} 
-                        color={newGroupType === type.value ? '#667eea' : '#94a3b8'} 
-                      />
-                      <Text style={[
-                        styles.radioLabel,
-                        newGroupType === type.value && styles.radioLabelSelected
-                      ]}>
-                        {type.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Create Button */}
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  (!newGroupName.trim() || creatingGroup) && styles.primaryButtonDisabled
-                ]}
-                onPress={createGroup}
-                disabled={!newGroupName.trim() || creatingGroup}
-              >
-                <LinearGradient
-                  colors={(!newGroupName.trim() || creatingGroup) ? ['#94a3b8', '#64748b'] : ['#667eea', '#764ba2']}
-                  style={styles.buttonGradient}
-                >
-                  {creatingGroup ? (
-                    <View style={styles.buttonLoading}>
-                      <ActivityIndicator size="small" color="white" />
-                      <Text style={styles.primaryButtonText}>Creating...</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.buttonContent}>
-                      <MaterialIcons name="add" size={20} color="white" />
-                      <Text style={styles.primaryButtonText}>Create Group</Text>
-                    </View>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-    );
-  };
-
-  // Render join group modal
-  const renderJoinGroupModal = () => {
-    return (
-      <Modal
-        visible={showJoinGroup}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowJoinGroup(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Join Group</Text>
-            <TouchableOpacity 
-              onPress={() => setShowJoinGroup(false)}
-              style={styles.closeButton}
-            >
-              <MaterialIcons name="close" size={24} color="#64748b" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Join by Code */}
-            <View style={styles.joinSection}>
-              <View style={styles.sectionHeader}>
-                <MaterialIcons name="vpn-key" size={24} color="#667eea" />
-                <Text style={styles.sectionTitle}>Join by Invitation Code</Text>
-              </View>
-              <Text style={styles.sectionDescription}>
-                Enter the group code shared by a group member
-              </Text>
-              
-              <View style={styles.inputGroup}>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter group code"
-                  value={groupCode}
-                  onChangeText={setGroupCode}
-                  autoCapitalize="characters"
-                  maxLength={10}
-                  placeholderTextColor="#94a3b8"
-                />
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  (!groupCode.trim() || joiningGroup) && styles.primaryButtonDisabled
-                ]}
-                onPress={joinGroupByCode}
-                disabled={!groupCode.trim() || joiningGroup}
-              >
-                <LinearGradient
-                  colors={(!groupCode.trim() || joiningGroup) ? ['#94a3b8', '#64748b'] : ['#10b981', '#059669']}
-                  style={styles.buttonGradient}
-                >
-                  {joiningGroup ? (
-                    <View style={styles.buttonLoading}>
-                      <ActivityIndicator size="small" color="white" />
-                      <Text style={styles.primaryButtonText}>Joining...</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.buttonContent}>
-                      <MaterialIcons name="login" size={20} color="white" />
-                      <Text style={styles.primaryButtonText}>Join by Code</Text>
-                    </View>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-
-            {/* Available Groups */}
-            {availableGroups.length > 0 && (
-              <View style={styles.joinSection}>
-                <View style={styles.sectionHeader}>
-                  <MaterialIcons name="groups" size={24} color="#10b981" />
-                  <Text style={styles.sectionTitle}>Available Groups</Text>
-                </View>
-                <Text style={styles.sectionDescription}>
-                  Groups you can join directly
-                </Text>
-
-                {loadingGroups ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#667eea" />
-                    <Text style={styles.loadingText}>Loading groups...</Text>
+            {groupInfo ? (
+              <>
+                {/* Group Header */}
+                <View style={styles.groupHeaderCard}>
+                  <View style={styles.groupIconContainer}>
+                    <Text style={styles.groupIcon}>👥</Text>
                   </View>
-                ) : (
-                  <FlatList
-                    data={availableGroups}
-                    keyExtractor={(item) => item._id}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity
-                        style={styles.groupCard}
-                        onPress={() => joinGroup(item._id)}
-                        disabled={joiningGroup}
-                        activeOpacity={0.8}
-                      >
-                        <View style={styles.groupCardHeader}>
-                          <Text style={styles.groupCardName}>{item.name}</Text>
-                          <View style={[styles.groupCardBadge, { backgroundColor: getGroupTypeColor(item.groupType) }]}>
-                            <Text style={styles.groupCardBadgeText}>{item.groupType}</Text>
-                          </View>
+                  <Text style={styles.groupName}>{groupInfo.name}</Text>
+                  <Text style={styles.groupDescription}>{groupInfo.description}</Text>
+                  <View style={styles.groupStats}>
+                    <View style={styles.statCard}>
+                      <Text style={styles.statNumber}>{groupMembers.length}</Text>
+                      <Text style={styles.statLabel}>Members</Text>
+                    </View>
+                    <View style={styles.statCard}>
+                      <Text style={styles.statNumber}>{messages.length}</Text>
+                      <Text style={styles.statLabel}>Messages</Text>
+                    </View>
+                    <View style={styles.statCard}>
+                      <Text style={styles.statNumber}>
+                        {Math.ceil((Date.now() - new Date(groupInfo.createdAt).getTime()) / (1000 * 60 * 60 * 24))}
+                      </Text>
+                      <Text style={styles.statLabel}>Days</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Group Info */}
+                <View style={styles.infoCard}>
+                  <Text style={styles.cardTitle}>Information</Text>
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Type</Text>
+                    <Text style={styles.infoValue}>{groupInfo.groupType}</Text>
+                  </View>
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Created</Text>
+                    <Text style={styles.infoValue}>
+                      {new Date(groupInfo.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </Text>
+                  </View>
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Created By</Text>
+                    <Text style={styles.infoValue}>{groupInfo.createdBy.name}</Text>
+                  </View>
+                </View>
+
+                {/* Settings */}
+                <View style={styles.infoCard}>
+                  <Text style={styles.cardTitle}>Settings</Text>
+                  <View style={styles.settingItem}>
+                    <Text style={styles.settingLabel}>Max Members</Text>
+                    <Text style={styles.settingValue}>{groupInfo.settings.maxMembers}</Text>
+                  </View>
+                  <View style={styles.settingItem}>
+                    <Text style={styles.settingLabel}>Member Invites</Text>
+                    <View style={[styles.toggleIndicator, groupInfo.settings.allowMemberInvite && styles.toggleActive]}>
+                      <Text style={[styles.toggleText, groupInfo.settings.allowMemberInvite && styles.toggleTextActive]}>
+                        {groupInfo.settings.allowMemberInvite ? 'Enabled' : 'Disabled'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.settingItem}>
+                    <Text style={styles.settingLabel}>Approval Required</Text>
+                    <View style={[styles.toggleIndicator, groupInfo.settings.requireApproval && styles.toggleActive]}>
+                      <Text style={[styles.toggleText, groupInfo.settings.requireApproval && styles.toggleTextActive]}>
+                        {groupInfo.settings.requireApproval ? 'Yes' : 'No'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Role Distribution */}
+                <View style={styles.infoCard}>
+                  <Text style={styles.cardTitle}>Role Distribution</Text>
+                  <View style={styles.roleGrid}>
+                    {['admin', 'elderly', 'family_member', 'caregiver', 'member'].map(role => {
+                      const count = groupMembers.filter(m => m.role === role).length;
+                      if (count === 0) return null;
+                      
+                      return (
+                        <View key={role} style={styles.roleCard}>
+                          <View style={[styles.roleIndicator, { backgroundColor: getMemberRoleColor(role) }]} />
+                          <Text style={styles.roleCount}>{count}</Text>
+                          <Text style={styles.roleLabel}>{getRoleDisplayName(role)}</Text>
                         </View>
-                        <Text style={styles.groupCardDescription} numberOfLines={2}>
-                          {item.description || 'No description available'}
-                        </Text>
-                        <View style={styles.groupCardFooter}>
-                          <Text style={styles.groupCardMembers}>
-                            <MaterialIcons name="people" size={14} color="#94a3b8" />
-                            {' '}{item.members?.length || 0} members
-                          </Text>
-                          <MaterialIcons name="arrow-forward-ios" size={14} color="#667eea" />
-                        </View>
-                      </TouchableOpacity>
-                    )}
-                    scrollEnabled={false}
-                  />
-                )}
+                      );
+                    })}
+                  </View>
+                </View>
+              </>
+            ) : (
+              <View style={styles.center}>
+                <Text style={styles.emptyText}>No group information available</Text>
               </View>
             )}
           </ScrollView>
@@ -1305,221 +1428,519 @@ export default function GroupMessageScreen({ groupId: propGroupId }: GroupMessag
     );
   };
 
-  // Render group details modal
-  const renderGroupDetailsModal = () => {
-    if (!groupInfo) return null;
-
+  // Render members list modal
+  const renderMembersListModal = () => {
+    console.log('👥 Rendering members list modal');
     return (
       <Modal
-        visible={showGroupDetails}
+        visible={showMembersList}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowGroupDetails(false)}
+        onRequestClose={() => {
+          console.log('🚪 Closing members list modal');
+          setShowMembersList(false);
+        }}
       >
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Group Details</Text>
+            <Text style={styles.modalTitle}>Members ({groupMembers.length})</Text>
             <TouchableOpacity 
-              onPress={() => setShowGroupDetails(false)}
+              onPress={() => {
+                console.log('❌ Members list modal close button pressed');
+                setShowMembersList(false);
+              }}
               style={styles.closeButton}
             >
-              <MaterialIcons name="close" size={24} color="#64748b" />
+              <Text style={styles.closeButtonText}>✕</Text>
             </TouchableOpacity>
           </View>
-
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.groupDetailsContainer}>
-              {/* Group Info */}
-              <View style={styles.groupInfoSection}>
-                <Text style={styles.groupName}>{groupInfo.name}</Text>
-                {groupInfo.description && (
-                  <Text style={styles.groupDescription}>{groupInfo.description}</Text>
-                )}
-                <View style={styles.groupMetadata}>
-                  <View style={styles.metadataItem}>
-                    <MaterialIcons name="category" size={16} color="#667eea" />
-                    <Text style={styles.metadataText}>{groupInfo.groupType}</Text>
+          
+          <FlatList
+            data={groupMembers}
+            keyExtractor={(item) => {
+              console.log('🔑 Member key:', item._id);
+              return item._id;
+            }}
+            renderItem={({ item }) => {
+              console.log('👤 Rendering member:', item.userId.name, 'Role:', item.role);
+              return (
+                <View style={styles.memberCard}>
+                  <View style={styles.memberAvatar}>
+                    {renderAvatar(item.userId, 50)}
+                    <View style={[styles.onlineIndicator, { backgroundColor: '#4CAF50' }]} />
                   </View>
-                  <View style={styles.metadataItem}>
-                    <MaterialIcons name="people" size={16} color="#10b981" />
-                    <Text style={styles.metadataText}>{groupInfo.members.length} members</Text>
-                  </View>
-                  <View style={styles.metadataItem}>
-                    <MaterialIcons name="event" size={16} color="#f59e0b" />
-                    <Text style={styles.metadataText}>
-                      Created {new Date(groupInfo.createdAt).toLocaleDateString()}
+                  <View style={styles.memberInfo}>
+                    <View style={styles.memberHeader}>
+                      <Text style={styles.memberName}>{item.userId.name}</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: getMemberRoleColor(item.role) }]}>
+                        <Text style={styles.roleText}>{getRoleDisplayName(item.role)}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.memberEmail}>{item.userId.email}</Text>
+                    <Text style={styles.memberDate}>
+                      Joined {new Date(item.addedAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
                     </Text>
                   </View>
                 </View>
-              </View>
-
-              {/* Members List */}
-              <View style={styles.membersSection}>
-                <Text style={styles.sectionTitle}>Members</Text>
-                <FlatList
-                  data={groupInfo.members}
-                  keyExtractor={(item) => item._id}
-                  renderItem={({ item }) => (
-                    <View style={styles.memberItem}>
-                      <View style={styles.memberAvatar}>
-                        {item.profilePicture ? (
-                          <Image source={{ uri: item.profilePicture }} style={styles.avatar} />
-                        ) : (
-                          <View style={styles.avatarPlaceholder}>
-                            <Text style={styles.avatarText}>
-                              {item.name.charAt(0).toUpperCase()}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                      <View style={styles.memberInfo}>
-                        <Text style={styles.memberName}>{item.name}</Text>
-                        <Text style={styles.memberRole}>{item.role}</Text>
-                      </View>
-                    </View>
-                  )}
-                  scrollEnabled={false}
-                />
-              </View>
-            </View>
-          </ScrollView>
+              );
+            }}
+            style={styles.membersList}
+            showsVerticalScrollIndicator={false}
+            ItemSeparatorComponent={() => <View style={styles.memberSeparator} />}
+          />
         </SafeAreaView>
       </Modal>
     );
   };
 
-  // Helper function to get group type color
-  const getGroupTypeColor = (type: string) => {
-    switch (type) {
-      case 'family': return '#667eea';
-      case 'care': return '#10b981';
-      case 'community': return '#f59e0b';
-      default: return '#94a3b8';
-    }
+  // Render message item
+  const renderMessage = ({ item }: { item: Message }) => {
+    console.log('💬 Rendering message:', {
+      id: item._id,
+      sender: item.sender.name,
+      text: item.content.text.substring(0, 50) + '...',
+      isOwn: item.sender._id === currentUser?._id
+    });
+    
+    const isOwnMessage = item.sender._id === currentUser?._id;
+    const hasReactions = item.reactions.length > 0;
+    
+    return (
+      <Animated.View 
+        style={[
+          styles.messageContainer, 
+          isOwnMessage && styles.ownMessageContainer,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+        ]}
+      >
+        {/* Reply indicator */}
+        {item.replyTo && (
+          <View style={styles.replyContainer}>
+            <View style={styles.replyLine} />
+            <Text style={styles.replyText}>
+              Replying to: {item.replyTo.content.text}
+            </Text>
+          </View>
+        )}
+        
+        {/* Message content */}
+        <View style={styles.messageRow}>
+          {/* Avatar for other messages */}
+          {!isOwnMessage && (
+            <View style={styles.messageAvatar}>
+              {renderAvatar(item.sender, 32)}
+            </View>
+          )}
+          
+          {/* Message bubble */}
+          <View style={[
+            styles.messageBubble, 
+            isOwnMessage ? styles.ownMessage : styles.otherMessage
+          ]}>
+            {/* Sender name for other messages */}
+            {!isOwnMessage && (
+              <Text style={styles.senderName}>{item.sender.name}</Text>
+            )}
+            
+            {/* Message text */}
+            <Text style={[
+              styles.messageText, 
+              isOwnMessage && styles.ownMessageText
+            ]}>
+              {item.content.text}
+            </Text>
+            
+            {/* Message footer */}
+            <View style={styles.messageFooter}>
+              <Text style={[
+                styles.timeText, 
+                isOwnMessage && styles.ownTimeText
+              ]}>
+                {formatTime(item.createdAt)}
+                {item.isEdited && ' • edited'}
+              </Text>
+              
+              {/* Message status for own messages */}
+              {isOwnMessage && (
+                <View style={styles.messageStatus}>
+                  <Text style={styles.statusIcon}>✓✓</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          
+          {/* Avatar for own messages */}
+          {isOwnMessage && (
+            <View style={styles.messageAvatar}>
+              {renderAvatar(item.sender, 32)}
+            </View>
+          )}
+        </View>
+        
+        {/* Reactions */}
+        {hasReactions && (
+          <View style={[
+            styles.reactionsContainer,
+            isOwnMessage && styles.ownReactionsContainer
+          ]}>
+            {item.reactions.map((reaction, index) => {
+              console.log('😀 Rendering reaction:', reaction.emoji);
+              return (
+                <View key={index} style={styles.reactionBubble}>
+                  <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+        
+        {/* Action buttons */}
+        <View style={[
+          styles.messageActions,
+          isOwnMessage && styles.ownMessageActions
+        ]}>
+          <TouchableOpacity
+            onPress={() => {
+              console.log('↩️ Reply button pressed for message:', item._id);
+              setReplyingTo(item);
+            }}
+            style={styles.actionButton}
+          >
+            <Text style={styles.actionIcon}>↩️</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            onPress={() => {
+              console.log('😀 React button pressed for message:', item._id);
+              setShowReactionPicker(item._id);
+            }}
+            style={styles.actionButton}
+          >
+            <Text style={styles.actionIcon}>😊</Text>
+          </TouchableOpacity>
+          
+          {isOwnMessage && (
+            <>
+              <TouchableOpacity
+                onPress={() => {
+                  console.log('✏️ Edit button pressed for message:', item._id);
+                  setEditingMessage(item);
+                }}
+                style={styles.actionButton}
+              >
+                <Text style={styles.actionIcon}>✏️</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                onPress={() => {
+                  console.log('🗑️ Delete button pressed for message:', item._id);
+                  deleteMessage(item._id);
+                }}
+                style={styles.actionButton}
+              >
+                <Text style={styles.actionIcon}>🗑️</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </Animated.View>
+    );
   };
 
-  console.log('🖼️ Main render - showGroupOptions:', showGroupOptions, 'actualGroupId:', actualGroupId);
+  // Render input area
+  const renderInputArea = () => {
+    console.log('⌨️ Rendering input area');
+    return (
+      <View style={styles.inputContainer}>
+        {/* Reply indicator */}
+        {replyingTo && (
+          <View style={styles.replyingToContainer}>
+            <View style={styles.replyingToContent}>
+              <Text style={styles.replyingToLabel}>Replying to {replyingTo.sender.name}</Text>
+              <Text style={styles.replyingToText} numberOfLines={1}>
+                {replyingTo.content.text}
+              </Text>
+            </View>
+            <TouchableOpacity 
+              onPress={() => {
+                console.log('❌ Cancel reply pressed');
+                setReplyingTo(null);
+              }}
+              style={styles.cancelReplyButton}
+            >
+              <Text style={styles.cancelReplyIcon}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {/* Input row */}
+        <View style={styles.inputRow}>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              ref={inputRef}
+              style={styles.messageInput}
+              placeholder="Type a message..."
+              placeholderTextColor="#999"
+              value={newMessage}
+              onChangeText={(text) => {
+                console.log('⌨️ Message input changed:', text.length, 'characters');
+                setNewMessage(text);
+                // Simulate typing indicator
+                if (text.length > 0) {
+                  setIsTyping(true);
+                  setTimeout(() => setIsTyping(false), 1000);
+                }
+              }}
+              multiline
+              maxLength={1000}
+              textAlignVertical="center"
+            />
+            
+            <TouchableOpacity style={styles.attachButton}>
+              <Text style={styles.attachIcon}>📎</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <TouchableOpacity
+            onPress={() => {
+              console.log('📤 Send button pressed');
+              sendMessage();
+            }}
+            style={[
+              styles.sendButton, 
+              newMessage.trim() ? styles.sendButtonActive : styles.sendButtonInactive
+            ]}
+            disabled={!newMessage.trim()}
+          >
+            <Text style={styles.sendIcon}>
+              {newMessage.trim() ? '🚀' : '💬'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
-  // Show group options when no group ID
-  if (showGroupOptions) {
-    console.log('🎯 Showing group options screen');
-    return renderGroupOptionsScreen();
-  }
+  // Render header
+  const renderHeader = () => {
+    console.log('📱 Rendering header');
+    return (
+      <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => {
+            console.log('📋 Group details button pressed');
+            setShowGroupDetails(true);
+          }}
+          style={styles.headerLeft}
+        >
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {groupInfo?.name || 'Group Chat'}
+            </Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              {groupMembers.length} members • {getRoleDisplayName(currentUserRole)}
+            </Text>
+          </View>
+        </TouchableOpacity>
+        
+        <View style={styles.headerRight}>
+          {unreadCount > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadCount}>{unreadCount}</Text>
+            </View>
+          )}
+          
+          <TouchableOpacity 
+            onPress={() => {
+              console.log('👥 Members list button pressed');
+              setShowMembersList(true);
+            }}
+            style={styles.headerButton}
+          >
+            <Text style={styles.headerButtonIcon}>👥</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={() => {
+              console.log('👁️ Mark all read button pressed');
+              markAsRead();
+            }}
+            style={styles.headerButton}
+          >
+            <Text style={styles.headerButtonIcon}>✓</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
-  // Show loading while waiting for groupId
+  console.log('🖼️ Main render - loading state:', loading, 'messages count:', messages.length, 'actualGroupId:', actualGroupId);
+
+  // ✅ FIXED: Show loading while waiting for groupId
   if (!actualGroupId) {
     console.log('⏳ Showing loading screen - waiting for groupId');
     return (
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#667eea" />
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.loadingContent}>
-          <ActivityIndicator size="large" color="white" />
+        <View style={styles.loadingContent}>
+          <ActivityIndicator size="large" color="#667eea" />
           <Text style={styles.loadingText}>Connecting to your group...</Text>
-        </LinearGradient>
+        </View>
       </View>
     );
   }
 
-  // Main chat interface
+  if (loading && messages.length === 0) {
+    console.log('⏳ Showing loading screen');
+    return (
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#667eea" />
+        <View style={styles.loadingContent}>
+          <ActivityIndicator size="large" color="#667eea" />
+          <Text style={styles.loadingText}>Loading messages...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  console.log('🖼️ Rendering main chat interface');
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#667eea" />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       
-      {/* Header */}
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity 
-            onPress={() => setShowGroupDetails(true)}
-            style={styles.headerInfo}
-          >
-            <Text style={styles.headerTitle}>
-              {groupInfo?.name || 'Group Chat'}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              {groupInfo?.members.length || 0} members
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.headerButton}
-            onPress={() => setShowGroupDetails(true)}
-          >
-            <MaterialIcons name="info" size={24} color="white" />
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-
-      {/* Messages List */}
-      <Animated.View style={[styles.messagesContainer, { opacity: fadeAnim }]}>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#667eea" />
-            <Text style={styles.loadingText}>Loading messages...</Text>
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            keyExtractor={(item) => item._id}
-            renderItem={renderMessage}
-            style={styles.messagesList}
-            contentContainerStyle={styles.messagesContent}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-      </Animated.View>
-
-      {/* Message Input */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        <Animated.View 
-          style={[
-            styles.inputContainer,
-            { transform: [{ translateY: slideAnim }] }
-          ]}
-        >
-          <View style={styles.inputWrapper}>
-            <TextInput
-              ref={textInputRef}
-              style={styles.messageInput}
-              placeholder="Type a message..."
-              value={newMessage}
-              onChangeText={setNewMessage}
-              multiline
-              maxLength={1000}
-              placeholderTextColor="#94a3b8"
-              editable={!sendingMessage}
-            />
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                (!newMessage.trim() || sendingMessage) && styles.sendButtonDisabled
-              ]}
-              onPress={sendMessage}
-              disabled={!newMessage.trim() || sendingMessage}
-            >
-              <LinearGradient
-                colors={(!newMessage.trim() || sendingMessage) ? ['#94a3b8', '#64748b'] : ['#667eea', '#764ba2']}
-                style={styles.sendButtonGradient}
-              >
-                {sendingMessage ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <MaterialIcons name="send" size={20} color="white" />
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      </KeyboardAvoidingView>
-
+      {renderHeader()}
+      
+      <View style={styles.messagesContainer}>
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => {
+            console.log('🔑 Message key:', item._id);
+            return item._id;
+          }}
+          renderItem={renderMessage}
+          inverted
+          onEndReached={() => {
+            console.log('📜 FlatList onEndReached triggered');
+            loadMoreMessages();
+          }}
+          onEndReachedThreshold={0.1}
+          refreshing={refreshing}
+          onRefresh={() => {
+            console.log('🔄 Pull to refresh triggered');
+            setRefreshing(true);
+            loadMessages();
+          }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.messagesList}
+          ListFooterComponent={
+            hasMoreMessages ? (
+              <View style={styles.loadingMore}>
+                <ActivityIndicator size="small" color="#667eea" />
+              </View>
+            ) : null
+          }
+        />
+        
+        {renderTypingIndicator()}
+      </View>
+      
+      {renderInputArea()}
+      
       {/* Group Details Modal */}
       {renderGroupDetailsModal()}
+      
+      {/* Members List Modal */}
+      {renderMembersListModal()}
+      
+      {/* Reaction Picker Modal */}
+      <Modal
+        visible={!!showReactionPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          console.log('🚪 Closing reaction picker modal');
+          setShowReactionPicker(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.reactionPicker}>
+            <Text style={styles.reactionPickerTitle}>Choose a reaction</Text>
+            <View style={styles.reactionsGrid}>
+              {reactions.map((emoji, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => {
+                    console.log('😀 Reaction selected:', emoji, 'for message:', showReactionPicker);
+                    showReactionPicker && addReaction(showReactionPicker, emoji);
+                  }}
+                  style={styles.reactionOption}
+                >
+                  <Text style={styles.reactionOptionEmoji}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+      
+      {/* Edit Message Modal */}
+      <Modal
+        visible={!!editingMessage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          console.log('🚪 Closing edit message modal');
+          setEditingMessage(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModal}>
+            <Text style={styles.editModalTitle}>Edit Message</Text>
+            <TextInput
+              style={styles.editInput}
+              value={editingMessage?.content.text || ''}
+              onChangeText={(text) => {
+                console.log('✏️ Edit input changed:', text.length, 'characters');
+                setEditingMessage(prev => 
+                  prev ? { ...prev, content: { ...prev.content, text } } : null
+                );
+              }}
+              multiline
+              autoFocus
+              placeholder="Edit your message..."
+              placeholderTextColor="#999"
+            />
+            <View style={styles.editActions}>
+              <TouchableOpacity
+                onPress={() => {
+                  console.log('❌ Edit cancelled');
+                  setEditingMessage(null);
+                }}
+                style={[styles.editActionButton, styles.cancelEditButton]}
+              >
+                <Text style={styles.cancelEditText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  console.log('💾 Edit save pressed');
+                  if (editingMessage) {
+                    editMessage(editingMessage._id, editingMessage.content.text);
+                  }
+                }}
+                style={[styles.editActionButton, styles.saveEditButton]}
+              >
+                <Text style={styles.saveEditText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1530,282 +1951,431 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   
-  // Header Styles
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : StatusBar.currentHeight ? StatusBar.currentHeight + 20 : 40,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+  // Loading styles
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#667eea',
   },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  loadingContent: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 18,
+    color: 'white',
+    fontWeight: '600',
+  },
+  
+  // Header styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingTop: Platform.OS === 'ios' ? 60 : StatusBar.currentHeight ? StatusBar.currentHeight + 16 : 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  headerLeft: {
+    flex: 1,
   },
   headerInfo: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
-    color: 'white',
-    marginBottom: 4,
+    color: '#1a202c',
+    letterSpacing: -0.5,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#64748b',
+    marginTop: 2,
     fontWeight: '500',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headerButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
+    backgroundColor: 'rgba(102, 126, 234, 0.1)',
     justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
-
-  // Messages Styles
+  headerButtonIcon: {
+    fontSize: 18,
+  },
+  unreadBadge: {
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 8,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  unreadCount: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  
+  // Messages container
   messagesContainer: {
     flex: 1,
+    backgroundColor: '#f8fafc',
   },
   messagesList: {
-    flex: 1,
-  },
-  messagesContent: {
     paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingVertical: 8,
   },
+  
+  // Typing indicator
+  typingContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  typingBubble: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignSelf: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+    typingDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  typingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#94a3b8',
+    marginHorizontal: 2,
+  },
+  typingDot1: {
+    animationDelay: '0s',
+  },
+  typingDot2: {
+    animationDelay: '0.2s',
+  },
+  typingDot3: {
+    animationDelay: '0.4s',
+  },
+  
+  // Message styles
   messageContainer: {
-    marginBottom: 16,
+    marginVertical: 6,
+    paddingHorizontal: 4,
   },
   ownMessageContainer: {
     alignItems: 'flex-end',
   },
-  otherMessageContainer: {
-    alignItems: 'flex-start',
-  },
-  senderInfo: {
+  messageRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-end',
+    maxWidth: '85%',
   },
-  avatarContainer: {
-    marginRight: 8,
+  messageAvatar: {
+    marginHorizontal: 8,
+    marginBottom: 4,
   },
   avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    borderRadius: 16,
   },
   avatarPlaceholder: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#667eea',
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#667eea',
   },
   avatarText: {
     color: 'white',
-    fontSize: 12,
     fontWeight: '600',
   },
-  senderName: {
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: '500',
-  },
+  
+  // Message bubble
   messageBubble: {
-    maxWidth: width * 0.75,
-    borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    elevation: 2,
+    borderRadius: 24,
+    maxWidth: '100%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  ownMessageBubble: {
+  ownMessage: {
     backgroundColor: '#667eea',
-    borderBottomRightRadius: 4,
+    borderBottomRightRadius: 8,
+    marginLeft: 40,
   },
-  otherMessageBubble: {
+  otherMessage: {
     backgroundColor: 'white',
-    borderBottomLeftRadius: 4,
+    borderBottomLeftRadius: 8,
+    marginRight: 40,
+  },
+  
+  // Message content
+  senderName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
+    marginBottom: 4,
   },
   messageText: {
     fontSize: 16,
-    lineHeight: 20,
-    marginBottom: 4,
+    lineHeight: 22,
+    color: '#1e293b',
   },
   ownMessageText: {
     color: 'white',
   },
-  otherMessageText: {
-    color: '#1e293b',
+  
+  // Message footer
+  messageFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
   },
-  messageTime: {
-    fontSize: 11,
+  timeText: {
+    fontSize: 12,
+    color: '#94a3b8',
     fontWeight: '500',
   },
-  ownMessageTime: {
+  ownTimeText: {
     color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'right',
   },
-  otherMessageTime: {
-    color: '#94a3b8',
+  messageStatus: {
+    marginLeft: 8,
   },
-
-  // Input Styles
+  statusIcon: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  
+  // Reply container
+  replyContainer: {
+    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+    borderLeftWidth: 4,
+    borderLeftColor: '#667eea',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  replyLine: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: '#667eea',
+    borderRadius: 2,
+  },
+  replyText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  
+  // Reactions
+  reactionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+    marginHorizontal: 4,
+  },
+  ownReactionsContainer: {
+    justifyContent: 'flex-end',
+  },
+  reactionBubble: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 4,
+    marginBottom: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  reactionEmoji: {
+    fontSize: 16,
+  },
+  
+  // Message actions
+  messageActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 8,
+    opacity: 0.7,
+  },
+  ownMessageActions: {
+    justifyContent: 'flex-end',
+  },
+  actionButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  actionIcon: {
+    fontSize: 16,
+  },
+  
+  // Input area
   inputContainer: {
     backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.05)',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
+    paddingBottom: Platform.OS === 'ios' ? 34 : 12,
   },
-  inputWrapper: {
+  
+  // Reply indicator
+  replyingToContainer: {
+    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  replyingToContent: {
+    flex: 1,
+  },
+  replyingToLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#667eea',
+    marginBottom: 2,
+  },
+  replyingToText: {
+    fontSize: 14,
+    color: '#64748b',
+    lineHeight: 18,
+  },
+  cancelReplyButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  cancelReplyIcon: {
+    fontSize: 16,
+    color: '#ef4444',
+    fontWeight: '600',
+  },
+  
+  // Input row
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: '#f8fafc',
+  },
+  inputWrapper: {
+    flex: 1,
+    backgroundColor: '#f1f5f9',
     borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    marginRight: 12,
+    maxHeight: 120,
   },
   messageInput: {
     flex: 1,
     fontSize: 16,
+    lineHeight: 22,
     color: '#1e293b',
-    maxHeight: 100,
     paddingVertical: 8,
+    maxHeight: 100,
   },
-  sendButton: {
-    marginLeft: 12,
-  },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
-  sendButtonGradient: {
-    width: 40,
-    height: 40,
+  attachButton: {
+    backgroundColor: 'transparent',
     borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Group Options Screen
-  groupOptionsContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : StatusBar.currentHeight ? StatusBar.currentHeight + 20 : 40,
-  },
-  groupOptionsHeader: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  logoContainer: {
-    borderRadius: 40,
-    width: 80,
-    height: 80,
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginLeft: 8,
+  },
+  attachIcon: {
+    fontSize: 20,
+  },
+  
+  // Send button
+  sendButton: {
+    borderRadius: 24,
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 4,
   },
-  logoEmoji: {
-    fontSize: 36,
+  sendButtonActive: {
+    backgroundColor: '#667eea',
   },
-  groupOptionsTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1e293b',
-    textAlign: 'center',
-    marginBottom: 12,
+  sendButtonInactive: {
+    backgroundColor: '#e2e8f0',
   },
-  groupOptionsSubtitle: {
-    fontSize: 16,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 20,
+  sendIcon: {
+    fontSize: 24,
   },
-
-  // Options Container
-  optionsContainer: {
+  
+  // Loading more
+  loadingMore: {
     paddingVertical: 20,
-  },
-  optionCard: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
   },
-  optionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
   },
-  optionContent: {
-    flex: 1,
-  },
-  optionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  optionDescription: {
-    fontSize: 14,
-    color: '#64748b',
-    lineHeight: 20,
-  },
-
-  // Available Groups Preview
-  availableGroupsPreview: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  previewTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#10b981',
-    marginBottom: 4,
-    marginTop: 8,
-  },
-  previewSubtitle: {
-    fontSize: 14,
-    color: '#059669',
-    textAlign: 'center',
-  },
-
-  // Modal Styles
   modalContainer: {
     flex: 1,
     backgroundColor: '#f8fafc',
@@ -1815,286 +2385,398 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : StatusBar.currentHeight ? StatusBar.currentHeight + 20 : 40,
-    paddingBottom: 20,
-    backgroundColor: 'white',
+    paddingVertical: 16,
+    paddingTop: Platform.OS === 'ios' ? 60 : StatusBar.currentHeight ? StatusBar.currentHeight + 16 : 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1e293b',
+    color: '#1a202c',
   },
   closeButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 20,
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 18,
+    color: '#ef4444',
+    fontWeight: '600',
   },
   modalContent: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingVertical: 16,
   },
-
-  // Form Styles
-  formContainer: {
-    paddingBottom: 40,
-  },
-  inputGroup: {
-    marginBottom: 24,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 8,
-  },
-  textInput: {
+  
+  // Group details modal
+  groupHeaderCard: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#1e293b',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-
-  // Radio Group
-  radioGroup: {
-    gap: 12,
-  },
-  radioOption: {
-    flexDirection: 'row',
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 20,
     alignItems: 'center',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-  },
-  radioOptionSelected: {
-    borderColor: '#667eea',
-    backgroundColor: 'rgba(102, 126, 234, 0.1)',
-  },
-  radioLabel: {
-    fontSize: 16,
-    color: '#64748b',
-    fontWeight: '500',
-    marginLeft: 12,
-  },
-  radioLabelSelected: {
-    color: '#667eea',
-    fontWeight: '600',
-  },
-
-  // Buttons
-  primaryButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  primaryButtonDisabled: {
-    opacity: 0.6,
-  },
-  buttonGradient: {
-    padding: 18,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  buttonLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  // Join Group Styles
-  joinSection: {
-    marginBottom: 32,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginLeft: 8,
-  },
-  sectionDescription: {
-    fontSize: 14,
-    color: '#64748b',
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-
-  // Group Cards
-  groupCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  groupCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  groupIconContainer: {
+    backgroundColor: '#667eea',
+    borderRadius: 40,
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
   },
-  groupCardName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
-    flex: 1,
-  },
-  groupCardBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  groupCardBadgeText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  groupCardDescription: {
-    fontSize: 14,
-    color: '#64748b',
-    lineHeight: 18,
-    marginBottom: 12,
-  },
-  groupCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  groupCardMembers: {
-    fontSize: 12,
-    color: '#94a3b8',
-    fontWeight: '500',
-  },
-
-  // Group Details
-  groupDetailsContainer: {
-    paddingBottom: 40,
-  },
-  groupInfoSection: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  groupIcon: {
+    fontSize: 36,
   },
   groupName: {
     fontSize: 24,
     fontWeight: '700',
     color: '#1e293b',
+    textAlign: 'center',
     marginBottom: 8,
   },
   groupDescription: {
     fontSize: 16,
     color: '#64748b',
+    textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  groupMetadata: {
-    gap: 12,
-  },
-  metadataItem: {
+  groupStats: {
     flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+  },
+  statCard: {
     alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 16,
+    minWidth: 80,
   },
-  metadataText: {
-    fontSize: 14,
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#667eea',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
     color: '#64748b',
-    marginLeft: 8,
     fontWeight: '500',
+    textAlign: 'center',
   },
-
-  // Members Section
-  membersSection: {
+  
+  // Info cards
+  infoCard: {
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 16,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  infoLabel: {
+    fontSize: 15,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  infoValue: {
+    fontSize: 15,
+    color: '#1e293b',
+    fontWeight: '600',
+  },
+  
+  // Settings
+  settingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  settingLabel: {
+    fontSize: 15,
+    color: '#1e293b',
+    fontWeight: '500',
+  },
+  settingValue: {
+    fontSize: 15,
+    color: '#667eea',
+    fontWeight: '600',
+  },
+  toggleIndicator: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  toggleActive: {
+    backgroundColor: '#667eea',
+  },
+  toggleText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  toggleTextActive: {
+    color: 'white',
+  },
+  
+  // Role grid
+  roleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  roleCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    width: '48%',
+    marginBottom: 12,
+  },
+  roleIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  roleCount: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  roleLabel: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  
+  // Members list
+  membersList: {
+    flex: 1,
+  },
+  memberCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  memberAvatar: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  memberName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+    flex: 1,
+  },
+  roleBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  roleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'white',
+    textAlign: 'center',
+  },
+  memberEmail: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 2,
+  },
+  memberDate: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+  memberSeparator: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginHorizontal: 16,
+  },
+  
+  // Reaction picker
+  reactionPicker: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 24,
+    padding: 24,
+    margin: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  reactionPickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 20,
+  },
+  reactionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  reactionOption: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 20,
+    width: 56,
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    margin: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
-  memberItem: {
+  reactionOptionEmoji: {
+    fontSize: 28,
+  },
+  
+  // Edit modal
+  editModal: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 24,
+    padding: 24,
+    margin: 20,
+    width: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  editModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  editInput: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 16,
+    color: '#1e293b',
+    minHeight: 100,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  editActions: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  editActionButton: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    flex: 0.45,
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
   },
-  memberAvatar: {
-    marginRight: 12,
+  cancelEditButton: {
+    backgroundColor: '#f1f5f9',
   },
-  memberInfo: {
-    flex: 1,
+  saveEditButton: {
+    backgroundColor: '#667eea',
   },
-  memberName: {
+  cancelEditText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 2,
-  },
-  memberRole: {
-    fontSize: 14,
     color: '#64748b',
-    textTransform: 'capitalize',
   },
-
-  // Loading Styles
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
+  saveEditText: {
     fontSize: 16,
+    fontWeight: '600',
     color: 'white',
-    fontWeight: '500',
+  },
+  
+  // Empty state
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#94a3b8',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
