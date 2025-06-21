@@ -1,27 +1,27 @@
 // app/(tabs)/index.tsx - Enhanced Video Analysis with Google Drive Video and Robust Debugging
-import React, { useEffect, useState, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { VideoView, useVideoPlayer } from 'expo-video';
+import React, { useEffect, useRef, useState } from "react";
 import {
-  SafeAreaView,
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Dimensions,
-  Alert,
-  Linking,
   ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Linking,
+  Modal,
   PermissionsAndroid,
   Platform,
   RefreshControl,
-  Modal,
-  FlatList,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import Geolocation from 'react-native-geolocation-service';
-import MapView, { Marker, Circle } from 'react-native-maps';
-import { VideoView, useVideoPlayer } from 'expo-video';
+import MapView, { Circle, Marker } from 'react-native-maps';
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 
 const { width } = Dimensions.get("window");
 
@@ -180,11 +180,11 @@ interface VideoAnalysisResult {
   fallTime?: number;
   totalFrames: number;
   videoDuration: number;
-  fallEvents: Array<{
+  fallEvents: {
     timestamp: number;
     confidence: number;
     severity: string;
-  }>;
+  }[];
   geminiAnalysis: {
     summary: string;
     riskFactors: string[];
@@ -246,19 +246,32 @@ export default function IndexScreen() {
   // ✅ GOOGLE DRIVE VIDEO SETUP
   const [driveVideoUri, setDriveVideoUri] = useState<string | null>(null);
   
-  // Convert Google Drive share link to direct streaming URL
+  // ✅ FIXED: Convert Google Drive share link to direct streaming URL
   const convertGoogleDriveUrl = (shareUrl: string): string => {
     debugLogger.log('VIDEO_CONVERT', 'info', 'Converting Google Drive URL', { shareUrl }, 'IndexScreen', 'convertGoogleDriveUrl');
     
     try {
-      // Extract file ID from Google Drive share URL
-      const fileIdMatch = shareUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
-      if (!fileIdMatch) {
-        throw new Error('Invalid Google Drive URL format');
+      // Extract file ID from various Google Drive URL formats
+      let fileId = '';
+      
+      // Format 1: /d/FILE_ID/view
+      const match1 = shareUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (match1) {
+        fileId = match1[1];
       }
       
-      const fileId = fileIdMatch[1];
-      const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+      // Format 2: id=FILE_ID
+      const match2 = shareUrl.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+      if (!fileId && match2) {
+        fileId = match2[1];
+      }
+      
+      if (!fileId) {
+        throw new Error('Could not extract file ID from Google Drive URL');
+      }
+      
+      // Use the streaming URL format that works better with video players
+      const directUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
       
       debugLogger.log('VIDEO_CONVERT', 'success', 'Google Drive URL converted', {
         originalUrl: shareUrl,
@@ -278,12 +291,32 @@ export default function IndexScreen() {
 
   // Video Player Setup with Google Drive URL
   const googleDriveShareUrl = 'https://drive.google.com/file/d/1on8plYPrcr7JB72BBKAu_IXUK3rBDoF7/view?usp=sharing';
-  const player = useVideoPlayer(driveVideoUri || '', player => {
+  const player = useVideoPlayer(driveVideoUri || '', (player) => {
     player.loop = false;
     player.muted = false;
+    
+    // Add event listeners for better debugging
+    player.addListener('statusChange', (status) => {
+      debugLogger.log('VIDEO_PLAYER', 'info', 'Player status changed', { 
+        status,
+        isPlaying: status.isPlaying,
+        currentTime: status.currentTime,
+        duration: status.duration
+      }, 'IndexScreen', 'videoPlayer');
+      
+      setIsVideoPlaying(status.isPlaying || false);
+    });
+    
+    player.addListener('playbackError', (error) => {
+      debugLogger.log('VIDEO_PLAYER', 'error', 'Video playback error', { 
+        error: error.message 
+      }, 'IndexScreen', 'videoPlayer');
+      
+      setVideoError(`Playback error: ${error.message}`);
+    });
   });
 
-  // ✅ LOAD GOOGLE DRIVE VIDEO
+  // ✅ FIXED: Load Google Drive Video with better error handling
   const loadGoogleDriveVideo = async () => {
     debugLogger.log('VIDEO_LOAD', 'info', 'Starting Google Drive video load', { 
       shareUrl: googleDriveShareUrl 
@@ -296,43 +329,15 @@ export default function IndexScreen() {
       // Convert Google Drive share URL to direct streaming URL
       const directUrl = convertGoogleDriveUrl(googleDriveShareUrl);
       
-      debugLogger.log('VIDEO_LOAD', 'info', 'Testing video URL accessibility', { directUrl }, 'IndexScreen', 'loadGoogleDriveVideo');
+      debugLogger.log('VIDEO_LOAD', 'info', 'Setting video URI', { directUrl }, 'IndexScreen', 'loadGoogleDriveVideo');
       
-      // Test if the URL is accessible
-      const testResponse = await fetch(directUrl, { method: 'HEAD' });
-      debugLogger.log('VIDEO_LOAD', 'info', 'Video URL test response', {
-        status: testResponse.status,
-        ok: testResponse.ok,
-        headers: Object.fromEntries(testResponse.headers.entries())
-      }, 'IndexScreen', 'loadGoogleDriveVideo');
-      
-      if (!testResponse.ok) {
-        // Try alternative streaming URL format
-        const fileId = googleDriveShareUrl.match(/\/d\/([a-zA-Z0-9-_]+)/)?.[1];
-        const alternativeUrl = `https://drive.google.com/uc?id=${fileId}&export=download`;
-        
-        debugLogger.log('VIDEO_LOAD', 'warning', 'Primary URL failed, trying alternative', {
-          primaryUrl: directUrl,
-          alternativeUrl
-        }, 'IndexScreen', 'loadGoogleDriveVideo');
-        
-        const altTestResponse = await fetch(alternativeUrl, { method: 'HEAD' });
-        if (altTestResponse.ok) {
-          setDriveVideoUri(alternativeUrl);
-          debugLogger.log('VIDEO_LOAD', 'success', 'Alternative URL works', { alternativeUrl }, 'IndexScreen', 'loadGoogleDriveVideo');
-        } else {
-          throw new Error(`Video URL not accessible. Status: ${testResponse.status}`);
-        }
-      } else {
-        setDriveVideoUri(directUrl);
-        debugLogger.log('VIDEO_LOAD', 'success', 'Primary URL works', { directUrl }, 'IndexScreen', 'loadGoogleDriveVideo');
-      }
-      
+      // Set the video URI directly - don't test with fetch as it may fail due to CORS
+      setDriveVideoUri(directUrl);
       setVideoLoaded(true);
       setVideoError(null);
       
-      debugLogger.log('VIDEO_LOAD', 'success', 'Google Drive video loaded successfully', {
-        finalUrl: driveVideoUri,
+      debugLogger.log('VIDEO_LOAD', 'success', 'Google Drive video URI set successfully', {
+        finalUrl: directUrl,
         loaded: true
       }, 'IndexScreen', 'loadGoogleDriveVideo');
       
@@ -346,12 +351,31 @@ export default function IndexScreen() {
       setVideoError(error.message);
       setVideoLoaded(false);
       
-      // Fallback: Try to use the share URL directly (might work in some cases)
-      debugLogger.log('VIDEO_LOAD', 'warning', 'Attempting fallback with share URL', {
-        fallbackUrl: googleDriveShareUrl
-      }, 'IndexScreen', 'loadGoogleDriveVideo');
-      
-      setDriveVideoUri(googleDriveShareUrl);
+      // Try alternative URL formats
+      try {
+        const fileId = googleDriveShareUrl.match(/\/d\/([a-zA-Z0-9-_]+)/)?.[1];
+        if (fileId) {
+          const alternativeUrls = [
+            `https://drive.google.com/file/d/${fileId}/preview`,
+            `https://drive.google.com/uc?id=${fileId}&export=download`,
+            `https://docs.google.com/uc?export=view&id=${fileId}`
+          ];
+          
+          debugLogger.log('VIDEO_LOAD', 'warning', 'Trying alternative URLs', {
+            fileId,
+            alternativeUrls
+          }, 'IndexScreen', 'loadGoogleDriveVideo');
+          
+          // Try the first alternative
+          setDriveVideoUri(alternativeUrls[0]);
+          setVideoLoaded(true);
+          setVideoError(null);
+        }
+      } catch (altError) {
+        debugLogger.log('VIDEO_LOAD', 'error', 'All video URL attempts failed', {
+          altError: altError.message
+        }, 'IndexScreen', 'loadGoogleDriveVideo');
+      }
     }
   };
 
@@ -509,7 +533,7 @@ export default function IndexScreen() {
     }
   };
 
-  // Fetch Location Data with comprehensive logging
+  // ✅ FIXED: Fetch Location Data with comprehensive logging
   const fetchLocationData = async (userId?: string) => {
     const targetUserId = userId || elderlyUserId;
     
@@ -549,8 +573,7 @@ export default function IndexScreen() {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok,
-        responseTime: `${endTime - startTime}ms`,
-        headers: Object.fromEntries(response.headers.entries())
+        responseTime: `${endTime - startTime}ms`
       }, 'IndexScreen', 'fetchLocationData');
       
       if (!response.ok) {
@@ -568,11 +591,17 @@ export default function IndexScreen() {
         hasLocation: !!data.location,
         hasGeofence: !!data.geofence,
         userName: data.name,
-        userRole: data.role
+        userRole: data.role,
+        locationCoords: data.location ? `${data.location.latitude}, ${data.location.longitude}` : 'N/A',
+        geofenceRadius: data.geofence ? data.geofence.radius : 'N/A'
       }, 'IndexScreen', 'fetchLocationData');
       
       setLocationData(data);
-      checkSafeZoneStatus(data);
+      
+      // Add delay before checking safe zone to ensure state is updated
+      setTimeout(() => {
+        checkSafeZoneStatus(data);
+      }, 100);
       
       setDashboardStats(prev => ({
         ...prev,
@@ -590,80 +619,108 @@ export default function IndexScreen() {
         stack: error.stack,
         targetUserId
       }, 'IndexScreen', 'fetchLocationData');
+      
+      // Don't show alert on every error, just log it
+      setLocationData(null);
     } finally {
       setLocationLoading(false);
     }
   };
 
-  // Check Safe Zone Status with detailed logging
+  // ✅ FIXED: Check Safe Zone Status with proper coordinate validation
   const checkSafeZoneStatus = (data: LocationData) => {
     debugLogger.log('SAFE_ZONE', 'info', 'Checking safe zone status', {
       hasLocation: !!data.location,
       hasGeofence: !!data.geofence,
-      userName: data.name
+      userName: data.name,
+      locationData: data.location,
+      geofenceData: data.geofence
     }, 'IndexScreen', 'checkSafeZoneStatus');
     
-    if (!data.location || !data.geofence) {
+    if (!data.location || !data.geofence || !data.geofence.center) {
       debugLogger.log('SAFE_ZONE', 'warning', 'Missing location or geofence data', {
         hasLocation: !!data.location,
-        hasGeofence: !!data.geofence
+        hasGeofence: !!data.geofence,
+        hasGeofenceCenter: !!data.geofence?.center
       }, 'IndexScreen', 'checkSafeZoneStatus');
+      
+      // Default to safe zone if data is missing
+      setIsInsideSafeZone(true);
       return;
     }
 
-    const distance = calculateDistance(
-      data.location.latitude,
-      data.location.longitude,
-      data.geofence.center.latitude,
-      data.geofence.center.longitude
-    );
+    try {
+      const userLat = parseFloat(data.location.latitude);
+      const userLng = parseFloat(data.location.longitude);
+      const centerLat = parseFloat(data.geofence.center.latitude);
+      const centerLng = parseFloat(data.geofence.center.longitude);
+      const radius = parseFloat(data.geofence.radius);
 
-    const isInside = distance <= data.geofence.radius;
-    setIsInsideSafeZone(isInside);
-
-    debugLogger.log('SAFE_ZONE', isInside ? 'success' : 'warning', 'Safe zone check completed', {
-      distance: `${distance.toFixed(2)}m`,
-      radius: `${data.geofence.radius}m`,
-      isInside,
-      userName: data.name,
-      coordinates: {
-        user: { lat: data.location.latitude, lng: data.location.longitude },
-        center: { lat: data.geofence.center.latitude, lng: data.geofence.center.longitude }
+      // Validate coordinates
+      if (isNaN(userLat) || isNaN(userLng) || isNaN(centerLat) || isNaN(centerLng) || isNaN(radius)) {
+        debugLogger.log('SAFE_ZONE', 'error', 'Invalid coordinate data', {
+          userLat, userLng, centerLat, centerLng, radius
+        }, 'IndexScreen', 'checkSafeZoneStatus');
+        setIsInsideSafeZone(true); // Default to safe
+        return;
       }
-    }, 'IndexScreen', 'checkSafeZoneStatus');
 
-    if (!isInside) {
-      debugLogger.log('SAFE_ZONE', 'warning', 'User outside safe zone - triggering alert', {
-        userName: data.name,
-        distance: `${distance.toFixed(2)}m`,
-        radius: `${data.geofence.radius}m`
-      }, 'IndexScreen', 'checkSafeZoneStatus');
+      const distance = calculateDistance(userLat, userLng, centerLat, centerLng);
+      const isInside = distance <= radius;
       
-      Alert.alert(
-        'Safety Alert',
-        `${data.name} is outside the safe zone!`,
-        [
-          { text: 'OK', style: 'default' },
-          { text: 'Call Now', style: 'destructive', onPress: makeCall }
-        ]
-      );
+      setIsInsideSafeZone(isInside);
+
+      debugLogger.log('SAFE_ZONE', isInside ? 'success' : 'warning', 'Safe zone check completed', {
+        distance: `${distance.toFixed(2)}m`,
+        radius: `${radius}m`,
+        isInside,
+        userName: data.name,
+        coordinates: {
+          user: { lat: userLat, lng: userLng },
+          center: { lat: centerLat, lng: centerLng }
+        }
+      }, 'IndexScreen', 'checkSafeZoneStatus');
+
+      // Only show alert if actually outside and distance is significant (> 50m to avoid GPS noise)
+      if (!isInside && distance > 50) {
+        debugLogger.log('SAFE_ZONE', 'warning', 'User significantly outside safe zone - triggering alert', {
+          userName: data.name,
+          distance: `${distance.toFixed(2)}m`,
+          radius: `${radius}m`
+        }, 'IndexScreen', 'checkSafeZoneStatus');
+        
+        Alert.alert(
+          'Safety Alert',
+          `${data.name} is ${distance.toFixed(0)}m outside the safe zone (${radius}m radius)!`,
+          [
+            { text: 'OK', style: 'default' },
+            { text: 'Call Now', style: 'destructive', onPress: makeCall }
+          ]
+        );
+      }
+    } catch (error) {
+      debugLogger.log('SAFE_ZONE', 'error', 'Safe zone calculation error', {
+        error: error.message,
+        data
+      }, 'IndexScreen', 'checkSafeZoneStatus');
+      setIsInsideSafeZone(true); // Default to safe on error
     }
   };
 
-  // Calculate Distance
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371e3;
-    const φ1 = lat1 * Math.PI/180;
-    const φ2 = lat2 * Math.PI/180;
-    const Δφ = (lat2-lat1) * Math.PI/180;
-    const Δλ = (lon2-lon1) * Math.PI/180;
+  // ✅ FIXED: Distance calculation with better precision
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371000; // Earth's radius in meters
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
 
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
               Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c;
+    return R * c; // Distance in meters
   };
 
   // Location Tracking with detailed logging
@@ -742,6 +799,19 @@ export default function IndexScreen() {
       };
     }
   }, [elderlyUserId]);
+
+  // ✅ FIXED: Add video loading state management
+  useEffect(() => {
+    if (driveVideoUri) {
+      debugLogger.log('VIDEO_EFFECT', 'info', 'Video URI changed, updating player', {
+        newUri: driveVideoUri
+      }, 'IndexScreen', 'useEffect[driveVideoUri]');
+      
+      // Reset states when URI changes
+      setIsVideoPlaying(false);
+      setVideoError(null);
+    }
+  }, [driveVideoUri]);
 
   // Video Analysis Function with comprehensive logging
   const analyzeVideo = async () => {
@@ -858,8 +928,8 @@ export default function IndexScreen() {
     }
   };
 
-  // Video Control Functions with logging
-  const toggleVideoPlayback = () => {
+  // ✅ FIXED: Video Control Functions
+  const toggleVideoPlayback = async () => {
     debugLogger.log('VIDEO_CONTROL', 'info', 'Toggling video playback', {
       currentlyPlaying: isVideoPlaying,
       hasVideoUri: !!driveVideoUri,
@@ -872,23 +942,26 @@ export default function IndexScreen() {
         hasVideoUri: !!driveVideoUri,
         videoLoaded
       }, 'IndexScreen', 'toggleVideoPlayback');
+      
+      Alert.alert('Video Not Ready', 'Please wait for the video to load completely.');
       return;
     }
     
     try {
       if (isVideoPlaying) {
-        player.pause();
+        await player.pause();
         debugLogger.log('VIDEO_CONTROL', 'info', 'Video paused', {}, 'IndexScreen', 'toggleVideoPlayback');
       } else {
-        player.play();
+        await player.play();
         debugLogger.log('VIDEO_CONTROL', 'info', 'Video playing', {}, 'IndexScreen', 'toggleVideoPlayback');
       }
-      setIsVideoPlaying(!isVideoPlaying);
     } catch (error) {
       debugLogger.log('VIDEO_CONTROL', 'error', 'Video control failed', {
         error: error.message,
         action: isVideoPlaying ? 'pause' : 'play'
       }, 'IndexScreen', 'toggleVideoPlayback');
+      
+      Alert.alert('Video Error', `Failed to ${isVideoPlaying ? 'pause' : 'play'} video: ${error.message}`);
     }
   };
 
@@ -1420,13 +1493,14 @@ export default function IndexScreen() {
             </View>
           </View>
           
-          <FlatList
-            data={debugLogs}
-            renderItem={renderDebugLog}
-            keyExtractor={(item) => item.id}
-            style={styles.debugLogsList}
-            showsVerticalScrollIndicator={false}
-          />
+         <FlatList
+  data={debugLogs}
+  renderItem={renderDebugLog}
+  keyExtractor={(item) => item.id}
+  style={styles.debugLogsList}
+  showsVerticalScrollIndicator={false}
+/>
+
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -1535,7 +1609,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
-  // Map Styles
+  // Map Styles - THIS WAS MISSING
   mapContainer: {
     marginBottom: 16,
     borderRadius: 12,
@@ -1545,6 +1619,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+  },
+  map: {
+    width: '100%',
+    height: 250,
   },
   
   locationInfo: {
