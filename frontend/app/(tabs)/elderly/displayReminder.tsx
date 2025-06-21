@@ -1724,9 +1724,7 @@
 
 
 
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -1739,33 +1737,136 @@ import {
   TouchableOpacity,
   View,
   Dimensions,
+  Platform,
 } from "react-native";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
-import ElderlyTaskScreen from "./earlyTaskScreen"; // <-- Import your task page
+import { scheduleAlarm, removeAlarm, stopAlarm } from "expo-alarm-module";
+import ElderlyTaskScreen from "./earlyTaskScreen";
 
 const { width } = Dimensions.get("window");
-
-// Configure notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
 
 export default function ReminderListScreen() {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showTasks, setShowTasks] = useState(false); // <-- Toggle state
+  const [showTasks, setShowTasks] = useState(false);
+  const [scheduledAlarms, setScheduledAlarms] = useState(new Set());
+
+  // **Expo Alarm Module Functions**
+  const scheduleReminderAlarm = async (reminder) => {
+    try {
+      const reminderDate = new Date(reminder.scheduledDateTime);
+      const now = new Date();
+
+      if (reminderDate <= now) {
+        Alert.alert("Invalid Date", "Cannot schedule alarm for past date");
+        return;
+      }
+
+      const alarmConfig = {
+        uid: `alarm_${reminder.id}`,
+        day: reminderDate,
+        title: `${getTypeIcon(reminder.reminderType)} ${reminder.title}`,
+        description: reminder.description || `${reminder.reminderType} reminder`,
+        showDismiss: true,
+        showSnooze: reminder.alarmSettings?.snoozeEnabled !== false,
+        snoozeInterval: reminder.alarmSettings?.snoozeInterval || 10, // minutes
+        repeating: reminder.isRecurring || false,
+        active: true,
+        vibrate: reminder.alarmSettings?.vibrate !== false,
+        sound: reminder.alarmSettings?.soundType || 'default',
+        priority: reminder.priority === 'high' ? 'max' : 'default',
+      };
+
+      await scheduleAlarm(alarmConfig);
+
+      // Store alarm info locally
+      const alarmInfo = {
+        reminderId: reminder.id,
+        alarmUid: alarmConfig.uid,
+        scheduledTime: reminderDate.toISOString(),
+        isRecurring: reminder.isRecurring,
+        title: reminder.title,
+        type: reminder.reminderType,
+      };
+
+      await AsyncStorage.setItem(`alarm_${reminder.id}`, JSON.stringify(alarmInfo));
+      
+      setScheduledAlarms(prev => new Set([...prev, reminder.id]));
+
+      Alert.alert(
+        "Alarm Set! ⏰",
+        `Your ${reminder.reminderType} alarm "${reminder.title}" is scheduled for ${reminderDate.toLocaleString()}`
+      );
+    } catch (error) {
+      console.error("Error scheduling alarm:", error);
+      Alert.alert("Error", "Failed to schedule alarm. Please try again.");
+    }
+  };
+
+  const removeReminderAlarm = async (reminderId) => {
+    try {
+      const alarmInfoString = await AsyncStorage.getItem(`alarm_${reminderId}`);
+      if (alarmInfoString) {
+        const alarmInfo = JSON.parse(alarmInfoString);
+        
+        // Remove the alarm using its UID
+        await removeAlarm(alarmInfo.alarmUid);
+        
+        // Clean up local storage
+        await AsyncStorage.removeItem(`alarm_${reminderId}`);
+        
+        setScheduledAlarms(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(reminderId);
+          return newSet;
+        });
+
+        Alert.alert("Success", "Alarm removed successfully");
+      }
+    } catch (error) {
+      console.error("Error removing alarm:", error);
+      Alert.alert("Error", "Failed to remove alarm");
+    }
+  };
+
+  const stopCurrentAlarm = async () => {
+    try {
+      await stopAlarm();
+      Alert.alert("Success", "Current alarm stopped");
+    } catch (error) {
+      console.error("Error stopping alarm:", error);
+      Alert.alert("Error", "Failed to stop alarm");
+    }
+  };
+
+  const snoozeAlarm = async (reminderId, snoozeMinutes = 10) => {
+    try {
+      // First stop current alarm
+      await stopAlarm();
+      
+      // Get the reminder and reschedule it for snooze time
+      const reminder = reminders.find(r => r.id === reminderId);
+      if (reminder) {
+        const snoozeTime = new Date(Date.now() + snoozeMinutes * 60 * 1000);
+        const snoozeReminder = {
+          ...reminder,
+          scheduledDateTime: snoozeTime.toISOString(),
+          title: `⏰ Snoozed: ${reminder.title}`,
+        };
+        
+        await scheduleReminderAlarm(snoozeReminder);
+      }
+    } catch (error) {
+      console.error("Error snoozing alarm:", error);
+      Alert.alert("Error", "Failed to snooze alarm");
+    }
+  };
 
   const fetchReminders = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem("accessToken");
-      const userId = await AsyncStorage.getItem("userId");
-
-      if (!token || !userId) {
+      if (!token) {
         Alert.alert("Authentication Error", "Please login again");
         return;
       }
@@ -1787,13 +1888,18 @@ export default function ReminderListScreen() {
 
       const data = await response.json();
 
-      if (
-        data.success &&
-        data.data &&
-        data.data.reminders &&
-        Array.isArray(data.data.reminders)
-      ) {
+      if (data.success && data.data && data.data.reminders) {
         setReminders(data.data.reminders);
+        
+        // Check which alarms are already scheduled
+        const scheduledSet = new Set();
+        for (const reminder of data.data.reminders) {
+          const alarmInfo = await AsyncStorage.getItem(`alarm_${reminder.id}`);
+          if (alarmInfo) {
+            scheduledSet.add(reminder.id);
+          }
+        }
+        setScheduledAlarms(scheduledSet);
       } else {
         setReminders([]);
       }
@@ -1806,75 +1912,10 @@ export default function ReminderListScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!showTasks) {
-      fetchReminders();
-      requestNotificationPermissions();
-    }
-  }, [fetchReminders, showTasks]);
-
-  const requestNotificationPermissions = async () => {
-    try {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Permission Required",
-          "Please enable notifications to receive reminders"
-        );
-      }
-    } catch (error) {
-      console.error("Error requesting notification permissions:", error);
-    }
-  };
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchReminders();
-  }, [fetchReminders]);
-
-  const scheduleNotification = async (reminder) => {
-    try {
-      const triggerDate = new Date(reminder.scheduledDateTime);
-      const now = new Date();
-
-      if (triggerDate <= now) {
-        Alert.alert(
-          "Invalid Date",
-          "Cannot schedule notification for past date"
-        );
-        return;
-      }
-
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `${getTypeIcon(reminder.reminderType)} ${reminder.title}`,
-          body: reminder.description || `${reminder.reminderType} reminder`,
-          data: {
-            reminderId: reminder.id,
-            requiresConfirmation: reminder.requiresConfirmation,
-          },
-          sound:
-            reminder.alarmSettings.soundType === "loud"
-              ? "default"
-              : "defaultCritical",
-        },
-        trigger: triggerDate,
-      });
-
-      Alert.alert(
-        "Success",
-        `Reminder scheduled for ${triggerDate.toLocaleString()}`
-      );
-    } catch (error) {
-      console.error("Error scheduling notification:", error);
-      Alert.alert("Error", "Failed to schedule notification");
-    }
-  };
-
   const deleteReminder = async (reminderId) => {
     Alert.alert(
       "Delete Reminder",
-      "Are you sure you want to delete this reminder?",
+      "Are you sure you want to delete this reminder and its alarm?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -1883,9 +1924,10 @@ export default function ReminderListScreen() {
           onPress: async () => {
             try {
               const token = await AsyncStorage.getItem("accessToken");
-              if (!token) {
-                throw new Error("No authentication token found");
-              }
+              if (!token) throw new Error("No authentication token found");
+
+              // Remove the alarm first
+              await removeReminderAlarm(reminderId);
 
               const response = await fetch(
                 `https://elderlybackend.onrender.com/api/reminders/${reminderId}`,
@@ -1900,7 +1942,7 @@ export default function ReminderListScreen() {
 
               if (response.ok) {
                 setReminders((prev) => prev.filter((r) => r.id !== reminderId));
-                Alert.alert("Success", "Reminder deleted successfully");
+                Alert.alert("Success", "Reminder and alarm deleted successfully");
               } else {
                 throw new Error("Failed to delete reminder");
               }
@@ -1913,33 +1955,63 @@ export default function ReminderListScreen() {
     );
   };
 
+  const showAlarmOptions = (reminder) => {
+    const isScheduled = scheduledAlarms.has(reminder.id);
+    
+    Alert.alert(
+      `${getTypeIcon(reminder.reminderType)} ${reminder.title}`,
+      "Choose an alarm action:",
+      [
+        { text: "Cancel", style: "cancel" },
+        ...(!isScheduled ? [{
+          text: "⏰ Schedule Alarm",
+          onPress: () => scheduleReminderAlarm(reminder),
+        }] : []),
+        ...(isScheduled ? [{
+          text: "❌ Remove Alarm",
+          onPress: () => removeReminderAlarm(reminder.id),
+          style: "destructive",
+        }] : []),
+        {
+          text: "⏰ Snooze 10min",
+          onPress: () => snoozeAlarm(reminder.id, 10),
+        },
+        {
+          text: "🔇 Stop Current",
+          onPress: stopCurrentAlarm,
+        },
+      ]
+    );
+  };
+
+  useEffect(() => {
+    if (!showTasks) {
+      fetchReminders();
+    }
+  }, [showTasks, fetchReminders]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchReminders();
+  }, [fetchReminders]);
+
   const getPriorityColor = (priority) => {
     switch (priority) {
-      case "high":
-        return "#FF5100";
-      case "medium":
-        return "#FF8C00";
-      case "low":
-        return "#009951";
-      default:
-        return "#C15C2D";
+      case "high": return "#FF5100";
+      case "medium": return "#FF8C00";
+      case "low": return "#009951";
+      default: return "#C15C2D";
     }
   };
 
   const getTypeIcon = (type) => {
     switch (type) {
-      case "medication":
-        return "💊";
-      case "appointment":
-        return "🏥";
-      case "activity":
-        return "🎯";
-      case "exercise":
-        return "🏃‍♂️";
-      case "meal":
-        return "🍽️";
-      default:
-        return "📋";
+      case "medication": return "💊";
+      case "appointment": return "🏥";
+      case "activity": return "🎯";
+      case "exercise": return "🏃‍♂️";
+      case "meal": return "🍽️";
+      default: return "📋";
     }
   };
 
@@ -1971,122 +2043,147 @@ export default function ReminderListScreen() {
     }
   };
 
-  const renderReminder = ({ item }) => (
-    <View
-      style={[
-        styles.reminderCard,
-        { borderLeftColor: getPriorityColor(item.priority) },
-      ]}
-    >
-      {/* Header */}
-      <View style={styles.reminderHeader}>
-        <View style={styles.typeIconContainer}>
-          <Text style={styles.typeIcon}>{getTypeIcon(item.reminderType)}</Text>
+  const renderReminder = ({ item }) => {
+    const isScheduled = scheduledAlarms.has(item.id);
+    
+    return (
+      <View style={[styles.reminderCard, { borderLeftColor: getPriorityColor(item.priority) }]}>
+        {/* Header */}
+        <View style={styles.reminderHeader}>
+          <View style={styles.typeIconContainer}>
+            <Text style={styles.typeIcon}>{getTypeIcon(item.reminderType)}</Text>
+          </View>
+          <View style={styles.reminderTitleContainer}>
+            <Text style={styles.reminderTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <Text style={styles.reminderType}>{item.reminderType}</Text>
+          </View>
+          <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
+            <Text style={styles.priorityText}>{item.priority.toUpperCase()}</Text>
+          </View>
         </View>
-        <View style={styles.reminderTitleContainer}>
-          <Text style={styles.reminderTitle} numberOfLines={2}>
-            {item.title}
-          </Text>
-          <Text style={styles.reminderType}>{item.reminderType}</Text>
-        </View>
-        <View
-          style={[
-            styles.priorityBadge,
-            { backgroundColor: getPriorityColor(item.priority) },
-          ]}
-        >
-          <Text style={styles.priorityText}>{item.priority.toUpperCase()}</Text>
-        </View>
-      </View>
 
-      {/* Description */}
-      {item.description && (
-        <Text style={styles.reminderDescription} numberOfLines={3}>
-          {item.description}
-        </Text>
-      )}
-
-      {/* Date and Time */}
-      <View style={styles.dateTimeContainer}>
-        <View style={styles.dateTimeItem}>
-          <MaterialIcons name="calendar-today" size={20} color="#FF8C00" />
-          <Text style={styles.dateTimeText}>
-            {formatDate(item.scheduledDateTime)}
+        {/* Description */}
+        {item.description && (
+          <Text style={styles.reminderDescription} numberOfLines={3}>
+            {item.description}
           </Text>
-        </View>
-        <View style={styles.dateTimeItem}>
-          <MaterialIcons name="access-time" size={20} color="#FF8C00" />
-          <Text style={styles.dateTimeText}>
-            {formatTime(item.scheduledDateTime)}
-          </Text>
-        </View>
-      </View>
+        )}
 
-      {/* Additional Info */}
-      <View style={styles.additionalInfo}>
-        {item.isRecurring && (
-          <View style={styles.infoChip}>
-            <MaterialIcons name="repeat" size={16} color="#009951" />
-            <Text style={styles.infoChipText}>Recurring</Text>
+        {/* Date and Time */}
+        <View style={styles.dateTimeContainer}>
+          <View style={styles.dateTimeItem}>
+            <MaterialIcons name="calendar-today" size={20} color="#FF8C00" />
+            <Text style={styles.dateTimeText}>{formatDate(item.scheduledDateTime)}</Text>
+          </View>
+          <View style={styles.dateTimeItem}>
+            <MaterialIcons name="access-time" size={20} color="#FF8C00" />
+            <Text style={styles.dateTimeText}>{formatTime(item.scheduledDateTime)}</Text>
+          </View>
+        </View>
+
+        {/* Alarm Status */}
+        {isScheduled && (
+          <View style={styles.alarmStatusContainer}>
+            <MaterialIcons name="alarm-on" size={20} color="#009951" />
+            <Text style={styles.alarmStatusText}>Alarm Scheduled</Text>
           </View>
         )}
-        {item.alarmSettings?.vibrate && (
-          <View style={styles.infoChip}>
-            <MaterialIcons name="vibration" size={16} color="#C15C2D" />
-            <Text style={styles.infoChipText}>Vibrate</Text>
-          </View>
-        )}
-        {item.alarmSettings?.snoozeEnabled && (
-          <View style={styles.infoChip}>
-            <MaterialIcons name="snooze" size={16} color="#FF8C00" />
-            <Text style={styles.infoChipText}>Snooze</Text>
-          </View>
-        )}
-      </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.scheduleButton]}
-          onPress={() => scheduleNotification(item)}
-          activeOpacity={0.8}
-        >
-          <MaterialIcons
-            name="notifications-active"
-            size={20}
-            color="#FFF3DD"
-          />
-          <Text style={styles.actionButtonText}>Schedule</Text>
-        </TouchableOpacity>
+        {/* Additional Info */}
+        <View style={styles.additionalInfo}>
+          {item.isRecurring && (
+            <View style={styles.infoChip}>
+              <MaterialIcons name="repeat" size={16} color="#009951" />
+              <Text style={styles.infoChipText}>
+                {item.recurrencePattern || 'Recurring'}
+              </Text>
+            </View>
+          )}
+          {item.alarmSettings?.vibrate && (
+            <View style={styles.infoChip}>
+              <MaterialIcons name="vibration" size={16} color="#C15C2D" />
+              <Text style={styles.infoChipText}>Vibrate</Text>
+            </View>
+          )}
+          {item.alarmSettings?.snoozeEnabled && (
+            <View style={styles.infoChip}>
+              <MaterialIcons name="snooze" size={16} color="#FF8C00" />
+              <Text style={styles.infoChipText}>Snooze</Text>
+            </View>
+          )}
+        </View>
 
-        <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => deleteReminder(item.id)}
-          activeOpacity={0.8}
-        >
-          <MaterialIcons name="delete-outline" size={20} color="#FFF3DD" />
-          <Text style={styles.actionButtonText}>Delete</Text>
-        </TouchableOpacity>
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[
+              styles.actionButton, 
+              isScheduled ? styles.removeButton : styles.scheduleButton
+            ]}
+            onPress={() => 
+              isScheduled 
+                ? removeReminderAlarm(item.id)
+                : scheduleReminderAlarm(item)
+            }
+            activeOpacity={0.8}
+          >
+            <MaterialIcons 
+              name={isScheduled ? "alarm-off" : "alarm"} 
+              size={20} 
+              color="#FFF3DD" 
+            />
+            <Text style={styles.actionButtonText}>
+              {isScheduled ? "Remove" : "Set Alarm"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.optionsButton]}
+            onPress={() => showAlarmOptions(item)}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="more-horiz" size={20} color="#FFF3DD" />
+            <Text style={styles.actionButtonText}>Options</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={() => deleteReminder(item.id)}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="delete-outline" size={20} color="#FFF3DD" />
+            <Text style={styles.actionButtonText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderEmptyComponent = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIconContainer}>
-        <MaterialIcons name="event-note" size={80} color="#C15C2D" />
+        <MaterialIcons name="alarm" size={80} color="#C15C2D" />
       </View>
-      <Text style={styles.emptyTitle}>No Reminders Yet</Text>
+      <Text style={styles.emptyTitle}>No Alarms Set</Text>
       <Text style={styles.emptySubtext}>
-        Your reminders will appear here once they are created by your family
+        Your reminder alarms will appear here once they are created by your family
         members or caregivers.
       </Text>
+      <TouchableOpacity
+        style={styles.stopAlarmButton}
+        onPress={stopCurrentAlarm}
+        activeOpacity={0.8}
+      >
+        <MaterialIcons name="alarm-off" size={24} color="#FFF3DD" />
+        <Text style={styles.stopAlarmButtonText}>Stop Current Alarm</Text>
+      </TouchableOpacity>
     </View>
   );
 
   // Main render
   if (showTasks) {
-    // Show the task page instead
     return <ElderlyTaskScreen />;
   }
 
@@ -2094,7 +2191,7 @@ export default function ReminderListScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FF5100" />
-        <Text style={styles.loadingText}>Loading your reminders...</Text>
+        <Text style={styles.loadingText}>Loading your alarms...</Text>
       </View>
     );
   }
@@ -2104,18 +2201,25 @@ export default function ReminderListScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>My Reminders</Text>
+          <Text style={styles.headerTitle}>My Alarms ⏰</Text>
           <Text style={styles.headerSubtitle}>
-            {reminders.length}{" "}
-            {reminders.length === 1 ? "reminder" : "reminders"} active
+            {reminders.length} {reminders.length === 1 ? "reminder" : "reminders"} • {scheduledAlarms.size} active alarms
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.headerIcon}
-          onPress={() => setShowTasks(true)}
-        >
-          <MaterialIcons name="assignment" size={28} color="#FFF3DD" />
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={[styles.headerButton, { backgroundColor: '#FF5100' }]}
+            onPress={stopCurrentAlarm}
+          >
+            <MaterialIcons name="alarm-off" size={24} color="#FFF3DD" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerButton, { backgroundColor: '#009951' }]}
+            onPress={() => setShowTasks(true)}
+          >
+            <MaterialIcons name="assignment" size={24} color="#FFF3DD" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Reminders List */}
@@ -2175,11 +2279,14 @@ const styles = StyleSheet.create({
     color: "rgba(255, 243, 221, 0.9)",
     fontWeight: "500",
   },
-  headerIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#009951",
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2272,6 +2379,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 8,
   },
+  alarmStatusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 153, 81, 0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginBottom: 16,
+    alignSelf: "flex-start",
+  },
+  alarmStatusText: {
+    fontSize: 14,
+    color: "#009951",
+    fontWeight: "600",
+    marginLeft: 8,
+  },
   additionalInfo: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -2301,10 +2424,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 16,
-    flex: 0.48,
+    flex: 0.31,
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -2314,14 +2437,20 @@ const styles = StyleSheet.create({
   scheduleButton: {
     backgroundColor: "#009951",
   },
-  deleteButton: {
+  removeButton: {
     backgroundColor: "#FF5100",
+  },
+  optionsButton: {
+    backgroundColor: "#FF8C00",
+  },
+  deleteButton: {
+    backgroundColor: "#C15C2D",
   },
   actionButtonText: {
     color: "#FFF3DD",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "bold",
-    marginLeft: 8,
+    marginLeft: 6,
   },
   loadingContainer: {
     flex: 1,
@@ -2362,6 +2491,21 @@ const styles = StyleSheet.create({
     color: "#C15C2D",
     textAlign: "center",
     lineHeight: 24,
+    marginBottom: 24,
+  },
+  stopAlarmButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FF5100",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 16,
+  },
+  stopAlarmButtonText: {
+    color: "#FFF3DD",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
   },
 });
 

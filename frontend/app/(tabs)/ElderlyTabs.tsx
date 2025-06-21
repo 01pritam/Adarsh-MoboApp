@@ -62,7 +62,7 @@ import ElderlyTaskScreen from "./elderly/earlyTaskScreen";
 import IndexScreen from "./elderly/index";
 import ModernGroupChat from "./elderly/JoinGroup";
 import MicScreen from "./elderly/mic";
-
+import ReminderListScreen from "./elderly/displayReminder"
 const Tab = createBottomTabNavigator();
 const { width } = Dimensions.get("window");
 
@@ -347,7 +347,7 @@ export default function ModernElderlyTabs() {
       initialRouteName="mic"
     >
       <Tab.Screen name="index" component={IndexScreen} />
-      <Tab.Screen name="remind" component={ElderlyTaskScreen} />
+      <Tab.Screen name="remind" component={ReminderListScreen} />
       <Tab.Screen name="mic" component={MicScreen} />
       <Tab.Screen name="task" component={ElderlyTaskScreen} />
       <Tab.Screen name="groups" component={ModernGroupChatWrapper} />
