@@ -6,7 +6,7 @@ import IndexScreen from "./index";
 import AddReminderScreen from "./family_members/setReminder";
 import FamilyTaskScreen from "./family_members/familytask";
 import CreateGroupScreen from "./family_members/CreateGroup";
-import LocationTrackerScreen from "./family_members/LocationTrackerScreen";
+// import LocationTrackerScreen from "./family_members/LocationTrackerScreen";
 import CaregiverPage from "./family_members/CaregiverPage";
 
 const Tab = createBottomTabNavigator();
@@ -64,11 +64,11 @@ export default function FamilyTabs() {
         component={CreateGroupScreen}
         options={{ tabBarLabel: "Groups" }}
       />
-      <Tab.Screen
+      {/* <Tab.Screen
         name="location"
         component={LocationTrackerScreen}
         options={{ tabBarLabel: "Location" }}
-      />
+      /> */}
       <Tab.Screen
         name="caregiver"
         component={CaregiverPage}

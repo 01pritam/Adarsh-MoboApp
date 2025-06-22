@@ -1,267 +1,29 @@
-// import React, { useEffect, useState } from 'react';
-// import {
-//   SafeAreaView, View, Text, TextInput, TouchableOpacity,
-//   FlatList, ActivityIndicator, Alert, StyleSheet
-// } from 'react-native';
-// import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// export default function JoinGroupScreen() {
-//   const [storedGroupId, setStoredGroupId] = useState<string | null>(null);
-//   const [groupIdInput, setGroupIdInput] = useState('');
-//   const [group, setGroup] = useState<any>(null);
-//   const [loading, setLoading] = useState(false);
-
-//   // Load stored groupId on mount
-//   useEffect(() => {
-//     AsyncStorage.getItem('groupId')
-//       .then(id => {
-//         console.log('Stored groupId:', id);
-//         setStoredGroupId(id);
-//       })
-//       .catch(e => console.error('AsyncStorage error:', e));
-//   }, []);
-
-//   // Fetch group info automatically if storedGroupId exists
-//   useEffect(() => {
-//     if (storedGroupId) fetchGroupInfo(storedGroupId);
-//   }, [storedGroupId]);
-
-//   // Fetch group details by ID
-//   const fetchGroupInfo = async (id: string) => {
-//     setLoading(true);
-//     try {
-//       const token = await AsyncStorage.getItem('accessToken');
-//       const res = await fetch(
-//         `https://elderlybackend.onrender.com/api/group/info/${id}`,
-//         { headers: { Authorization: `Bearer ${token}` } }
-//       );
-//       const data = await res.json();
-//       if (!res.ok) throw new Error(data.message);
-//       setGroup(data.group);
-//     } catch (err: any) {
-//       Alert.alert('Error', err.message || 'Failed to fetch group info');
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   // Join group by entered ID
-//   const joinGroup = async () => {
-//     if (!groupIdInput.trim()) {
-//       Alert.alert('Validation Error', 'Group ID is required');
-//       return;
-//     }
-//     setLoading(true);
-//     try {
-//       const token = await AsyncStorage.getItem('accessToken');
-//       const res = await fetch(
-//         'https://elderlybackend.onrender.com/api/group/join',
-//         {
-//           method: 'POST',
-//           headers: {
-//             'Content-Type': 'application/json',
-//             Authorization: `Bearer ${token}`
-//           },
-//           body: JSON.stringify({ groupId: groupIdInput.trim() })
-//         }
-//       );
-//       const data = await res.json();
-//       if (!res.ok) throw new Error(data.message);
-//       await AsyncStorage.setItem('groupId', groupIdInput.trim());
-//       setStoredGroupId(groupIdInput.trim());
-//       setGroupIdInput('');
-//       Alert.alert('Success', 'Joined group successfully');
-//     } catch (err: any) {
-//       Alert.alert('Error', err.message || 'Join failed');
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   // Render a single member item
-//   const renderMember = ({ item }: { item: any }) => (
-//     <View style={styles.memberCard}>
-//       <View>
-//         <Text style={styles.memberName}>{item.userId.name}</Text>
-//         <Text style={styles.memberRole}>{item.role}</Text>
-//       </View>
-//       <Text style={styles.memberEmail}>{item.userId.email}</Text>
-//     </View>
-//   );
-
-//   if (loading) {
-//     return (
-//       <View style={styles.center}>
-//         <ActivityIndicator size="large" color="#007AFF" />
-//       </View>
-//     );
-//   }
-
-//   // If group data exists, display group info and members
-//   if (group) {
-//     return (
-//       <SafeAreaView style={styles.container}>
-//         <Text style={styles.groupTitle}>{group.name}</Text>
-//         <Text style={styles.groupDesc}>{group.description}</Text>
-//         <View style={styles.settingsBox}>
-//           <Text style={styles.settingsTitle}>Group Settings:</Text>
-//           <Text>Allow Member Invite: {group.settings?.allowMemberInvite ? 'Yes' : 'No'}</Text>
-//           <Text>Require Approval: {group.settings?.requireApproval ? 'Yes' : 'No'}</Text>
-//           <Text>Max Members: {group.settings?.maxMembers ?? 'N/A'}</Text>
-//         </View>
-//         <Text style={styles.section}>Members ({group.members.length})</Text>
-//         <FlatList
-//           data={group.members}
-//           keyExtractor={item => item._id}
-//           renderItem={renderMember}
-//         />
-//       </SafeAreaView>
-//     );
-//   }
-
-//   // Otherwise, show the join form
-//   return (
-//     <SafeAreaView style={styles.container}>
-//       <Text style={styles.header}>Join a Group</Text>
-//       <TextInput
-//         style={styles.input}
-//         placeholder="Enter Group ID"
-//         value={groupIdInput}
-//         onChangeText={setGroupIdInput}
-//         autoCapitalize="none"
-//       />
-//       <TouchableOpacity
-//         style={styles.button}
-//         onPress={joinGroup}
-//         disabled={loading}
-//       >
-//         <Text style={styles.buttonText}>Join Group</Text>
-//       </TouchableOpacity>
-//     </SafeAreaView>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//     padding: 20,
-//     backgroundColor: 'FFFDDD'
-//   },
-//   center: {
-//     flex: 1,
-//     justifyContent: 'center',
-//     alignItems: 'center'
-//   },
-//   header: {
-//     fontSize: 20,
-//     fontWeight: '600',
-//     marginBottom: 12
-//   },
-//   input: {
-//     borderWidth: 1,
-//     borderColor: '#CCC',
-//     borderRadius: 8,
-//     padding: 12,
-//     backgroundColor: 'white',
-//     marginBottom: 16
-//   },
-//   button: {
-//     backgroundColor: '#4caf50',
-//     padding: 15,
-//     borderRadius: 8,
-//     alignItems: 'center'
-//   },
-//   buttonText: {
-//     color: 'white',
-//     fontSize: 16,
-//     fontWeight: '600'
-//   },
-//   groupTitle: {
-//     fontSize: 22,
-//     fontWeight: 'bold',
-//     textAlign: 'center',
-//     marginBottom: 4
-//   },
-//   groupDesc: {
-//     fontSize: 14,
-//     color: '#6C6C70',
-//     textAlign: 'center',
-//     marginBottom: 12
-//   },
-//   settingsBox: {
-//     backgroundColor: '#fff',
-//     borderRadius: 8,
-//     padding: 12,
-//     marginBottom: 12,
-//     elevation: 1
-//   },
-//   settingsTitle: {
-//     fontWeight: 'bold',
-//     marginBottom: 4
-//   },
-//   section: {
-//     fontSize: 18,
-//     fontWeight: '600',
-//     marginVertical: 12
-//   },
-//   memberCard: {
-//     flexDirection: 'row',
-//     justifyContent: 'space-between',
-//     alignItems: 'center',
-//     padding: 12,
-//     backgroundColor: 'white',
-//     marginBottom: 8,
-//     borderRadius: 8,
-//     elevation: 2
-//   },
-//   memberName: {
-//     fontSize: 16
-//   },
-//   memberRole: {
-//     fontSize: 14,
-//     color: '#666'
-//   },
-//   memberEmail: {
-//     fontSize: 12,
-//     color: '#888'
-//   }
-// });
-
-
-
-
-
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
-  Image,
   Modal,
   Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import MaterialIcons from "react-native-vector-icons/MaterialIcons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import socketService from "../../../utils/socketService.js";
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import socketService from '../../../utils/socketService.js';
 
-const { width, height } = Dimensions.get("window");
+const { width, height } = Dimensions.get('window');
 
+// Interfaces remain the same...
 interface GroupMember {
   userId: {
     _id: string;
@@ -269,7 +31,7 @@ interface GroupMember {
     email: string;
     profilePicture?: string;
   };
-  role: "admin" | "member" | "elderly" | "family_member" | "caregiver";
+  role: 'admin' | 'member' | 'elderly' | 'family_member' | 'caregiver';
   addedBy: string;
   addedAt: string;
   _id: string;
@@ -307,7 +69,7 @@ interface Message {
   };
   content: {
     text: string;
-    type: "text" | "image" | "file" | "audio" | "video";
+    type: 'text' | 'image' | 'file' | 'audio' | 'video';
     fileUrl?: string;
     fileName?: string;
     fileSize?: number;
@@ -337,13 +99,9 @@ interface GroupMessageProps {
   groupId?: string;
 }
 
-export default function GroupMessageScreen({
-  groupId: propGroupId,
-}: GroupMessageProps) {
+export default function GroupMessageScreen({ groupId: propGroupId }: GroupMessageProps) {
   // Get safe area insets for proper spacing
   const insets = useSafeAreaInsets();
-
-  // Tab bar height from your ElderlyTabs.tsx
   const TAB_BAR_HEIGHT = 80;
   const INPUT_CONTAINER_HEIGHT = 70;
 
@@ -353,16 +111,28 @@ export default function GroupMessageScreen({
   const socketInitialized = useRef(false);
   const currentUserSet = useRef(false);
 
-  // Core state
+  // ✅ CORRECTED: Core state with proper groupId logic
   const [actualGroupId, setActualGroupId] = useState<string | null>(null);
+  const [storedGroupId, setStoredGroupId] = useState<string | null>(null);
   const [groupInfo, setGroupInfo] = useState<Group | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
-  const [currentUserRole, setCurrentUserRole] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [hasValidGroup, setHasValidGroup] = useState(false);
+
+  // ✅ NEW: Create/Join Group States
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [createGroupName, setCreateGroupName] = useState('');
+  const [createGroupDescription, setCreateGroupDescription] = useState('');
+  const [createGroupType, setCreateGroupType] = useState('family');
+  const [joinGroupId, setJoinGroupId] = useState('');
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [joiningGroup, setJoiningGroup] = useState(false);
 
   // Message state
   const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState("");
+  const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -390,7 +160,7 @@ export default function GroupMessageScreen({
   // WebSocket state
   const [isConnected, setIsConnected] = useState(false);
   const [typingUsers, setTypingUsers] = useState(new Set<string>());
-  const [connectionStatus, setConnectionStatus] = useState("Connecting...");
+  const [connectionStatus, setConnectionStatus] = useState('Connecting...');
 
   // Refs
   const flatListRef = useRef<FlatList>(null);
@@ -400,56 +170,89 @@ export default function GroupMessageScreen({
 
   // Color palette for member avatars
   const memberColors = [
-    "#FF8C00", "#C15C2D", "#009951", "#FF5100",
-    "#FFA500", "#32CD32", "#FF6347", "#20B2AA",
+    '#FF8C00', '#C15C2D', '#009951', '#FF5100',
+    '#FFA500', '#32CD32', '#FF6347', '#20B2AA',
   ];
 
   // Extended emoji reactions
   const reactions = [
-    "👍", "❤️", "😂", "😮", "😢", "😡", "👏", "🔥",
-    "💯", "🎉", "😍", "🤔", "👎", "😴", "🤯", "🙄",
+    '👍', '❤️', '😂', '😮', '😢', '😡', '👏', '🔥',
+    '💯', '🎉', '😍', '🤔', '👎', '😴', '🤯', '🙄',
   ];
 
-  const quickReactions = ["👍", "❤️", "😂", "😮", "😢", "😡"];
+  const quickReactions = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
-  // Initialize groupId
+  // ✅ CORRECTED: Utility function to check if groupId is valid
+  const isValidGroupId = useCallback((id: string | null): boolean => {
+    if (!id) return false;
+    if (id === '') return false;
+    if (id === 'null') return false;
+    if (id === 'undefined') return false;
+    return id.trim().length > 0;
+  }, []);
+
+  // ✅ CORRECTED: Initialize groupId with proper null checking
   useEffect(() => {
     if (initializationStarted.current) return;
     initializationStarted.current = true;
 
     const initializeGroupId = async () => {
       try {
-        const storedId = await AsyncStorage.getItem("groupId");
+        console.log('🔍 Initializing groupId...');
+        
+        // Get stored groupId from AsyncStorage
+        const storedId = await AsyncStorage.getItem('groupId');
+        console.log('📦 Stored groupId from AsyncStorage:', storedId);
+        
+        // Use propGroupId if provided, otherwise use stored
         const finalGroupId = propGroupId || storedId;
-        if (finalGroupId) {
+        console.log('🎯 Final groupId determined:', finalGroupId);
+        
+        setStoredGroupId(storedId);
+        
+        // ✅ CORRECTED: Proper validation using the utility function
+        if (isValidGroupId(finalGroupId)) {
+          console.log('✅ Valid groupId found, setting actualGroupId');
           setActualGroupId(finalGroupId);
+          setHasValidGroup(true);
         } else {
-          Alert.alert("Error", "No group ID found. Please select a group first.");
+          console.log('❌ No valid groupId found');
+          setActualGroupId(null);
+          setHasValidGroup(false);
         }
       } catch (error) {
         console.error(`💥 [${componentId.current}] Error getting groupId:`, error);
+        setActualGroupId(null);
+        setHasValidGroup(false);
       }
     };
 
     initializeGroupId();
-  }, [propGroupId]);
+  }, [propGroupId, isValidGroupId]);
 
-  // Initialize current user
+  // ✅ CORRECTED: Initialize current user
   useEffect(() => {
-    if (!actualGroupId || currentUserSet.current) return;
+    if (currentUserSet.current) return;
 
     const initializeUser = async () => {
       try {
+        console.log('👤 Initializing current user...');
+        
         const [userId, userName, userEmail] = await Promise.all([
-          AsyncStorage.getItem("userId"),
-          AsyncStorage.getItem("userName"),
-          AsyncStorage.getItem("userEmail"),
+          AsyncStorage.getItem('userId'),
+          AsyncStorage.getItem('userName'),
+          AsyncStorage.getItem('userEmail'),
         ]);
 
-        if (userId) {
+        console.log('👤 User data retrieved:', { userId, userName, userEmail });
+
+        if (userId && isValidGroupId(userId)) {
           const userData = { _id: userId, name: userName, email: userEmail };
           setCurrentUser(userData);
           currentUserSet.current = true;
+          console.log('✅ Current user set successfully');
+        } else {
+          console.log('❌ No valid user ID found');
         }
       } catch (error) {
         console.error(`💥 [${componentId.current}] Error setting current user:`, error);
@@ -457,88 +260,41 @@ export default function GroupMessageScreen({
     };
 
     initializeUser();
-  }, [actualGroupId]);
+  }, [isValidGroupId]);
 
-  // Initialize WebSocket
+  // ✅ CORRECTED: Initialize WebSocket only when we have a valid group
   useEffect(() => {
-    if (socketInitialized.current) return;
+    if (!hasValidGroup || socketInitialized.current) return;
 
     const initializeSocket = async () => {
       try {
+        console.log('🔌 Initializing WebSocket connection...');
         socketInitialized.current = true;
-        setConnectionStatus("Connecting...");
+        setConnectionStatus('Connecting...');
         await socketService.connect();
         setIsConnected(true);
-        setConnectionStatus("Connected");
+        setConnectionStatus('Connected');
+        console.log('✅ WebSocket connected successfully');
       } catch (error) {
         console.error(`❌ [${componentId.current}] WebSocket connection failed:`, error);
         setIsConnected(false);
-        setConnectionStatus("Using REST API");
+        setConnectionStatus('Using REST API');
       }
     };
 
     initializeSocket();
-  }, []);
+  }, [hasValidGroup]);
 
-  // Setup socket listeners
+  // ✅ CORRECTED: Load data only when we have valid group and user
   useEffect(() => {
-    if (!isConnected || !actualGroupId || !currentUser) return;
-
-    socketService.joinGroup(actualGroupId);
-
-    socketService.onNewMessage((data) => {
-      const { message, groupId } = data;
-      if (groupId === actualGroupId) {
-        setMessages((prev) => {
-          const exists = prev.some((msg) => msg._id === message._id);
-          if (exists) return prev;
-          const updated = [...prev, message];
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-          return updated;
-        });
-      }
-    });
-
-    socketService.onUserTyping((data) => {
-      const { userId, groupId, isTyping } = data;
-      if (groupId === actualGroupId && userId !== currentUser._id) {
-        setTypingUsers((prev) => {
-          const newSet = new Set(prev);
-          if (isTyping) {
-            newSet.add(userId);
-          } else {
-            newSet.delete(userId);
-          }
-          return newSet;
-        });
-      }
-    });
-
-    socketService.onReactionAdded((data) => {
-      const { messageId, reactions } = data;
-      setMessages((prev) =>
-        prev.map((msg) => (msg._id === messageId ? { ...msg, reactions } : msg))
-      );
-    });
-
-    return () => {
-      socketService.removeListener("new_message");
-      socketService.removeListener("user_typing");
-      socketService.removeListener("reaction_added");
-      socketService.removeListener("group_joined");
-    };
-  }, [isConnected, actualGroupId, currentUser]);
-
-  // Load data when ready
-  useEffect(() => {
-    if (!actualGroupId || !currentUser || isInitializing) return;
+    if (!actualGroupId || !currentUser || !hasValidGroup || isInitializing) return;
 
     const initializeData = async () => {
+      console.log('📊 Initializing chat data...');
       setIsInitializing(true);
       try {
         await Promise.all([loadGroupInfo(), loadMessages()]);
+        console.log('✅ Chat data initialized successfully');
       } catch (error) {
         console.error(`💥 [${componentId.current}] Data initialization error:`, error);
       } finally {
@@ -547,17 +303,112 @@ export default function GroupMessageScreen({
     };
 
     initializeData();
-  }, [actualGroupId, currentUser]);
+  }, [actualGroupId, currentUser, hasValidGroup]);
 
   // Auth headers
   const getAuthHeaders = useCallback(async () => {
-    const token = await AsyncStorage.getItem("accessToken");
-    if (!token) throw new Error("No auth token");
+    const token = await AsyncStorage.getItem('accessToken');
+    if (!token) throw new Error('No auth token');
     return {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     };
   }, []);
+
+  // ✅ CORRECTED: Create Group Function
+  const createGroup = async () => {
+    if (!createGroupName.trim()) {
+      Alert.alert('Validation Error', 'Group name is required');
+      return;
+    }
+
+    setCreatingGroup(true);
+    try {
+      console.log('🏗️ Creating new group...');
+      
+      const headers = await getAuthHeaders();
+      const payload = {
+        name: createGroupName.trim(),
+        description: createGroupDescription.trim(),
+        groupType: createGroupType
+      };
+
+      const response = await fetch('https://elderlybackend.onrender.com/api/group', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+
+      console.log('✅ Group created successfully:', data.group);
+      
+      // Save groupId and update state
+      if (data.group && data.group._id) {
+        await AsyncStorage.setItem('groupId', data.group._id);
+        setStoredGroupId(data.group._id);
+        setActualGroupId(data.group._id);
+        setHasValidGroup(true);
+      }
+      
+      setShowCreateModal(false);
+      setCreateGroupName('');
+      setCreateGroupDescription('');
+      setCreateGroupType('family');
+      
+      Alert.alert('Success', `Group "${createGroupName}" created successfully!`);
+
+    } catch (error: any) {
+      console.error('💥 Create group error:', error);
+      Alert.alert('Error', error.message || 'Failed to create group');
+    } finally {
+      setCreatingGroup(false);
+    }
+  };
+
+  // ✅ CORRECTED: Join Group Function
+  const joinGroup = async () => {
+    if (!joinGroupId.trim()) {
+      Alert.alert('Validation Error', 'Group ID is required');
+      return;
+    }
+
+    setJoiningGroup(true);
+    try {
+      console.log('🔗 Joining group with ID:', joinGroupId.trim());
+      
+      const headers = await getAuthHeaders();
+
+      const response = await fetch('https://elderlybackend.onrender.com/api/group/join', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ groupId: joinGroupId.trim() })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+
+      console.log('✅ Successfully joined group');
+      
+      // Save groupId and update state
+      await AsyncStorage.setItem('groupId', joinGroupId.trim());
+      setStoredGroupId(joinGroupId.trim());
+      setActualGroupId(joinGroupId.trim());
+      setHasValidGroup(true);
+      
+      setShowJoinModal(false);
+      setJoinGroupId('');
+      
+      Alert.alert('Success', 'Successfully joined the group!');
+
+    } catch (error: any) {
+      console.error('💥 Join group error:', error);
+      Alert.alert('Error', error.message || 'Failed to join group');
+    } finally {
+      setJoiningGroup(false);
+    }
+  };
 
   // Load group info
   const loadGroupInfo = useCallback(async () => {
@@ -565,6 +416,8 @@ export default function GroupMessageScreen({
 
     setIsLoadingGroupInfo(true);
     try {
+      console.log('📋 Loading group info for:', actualGroupId);
+      
       const headers = await getAuthHeaders();
       const response = await fetch(
         `https://elderlybackend.onrender.com/api/group/info/${actualGroupId}`,
@@ -583,8 +436,10 @@ export default function GroupMessageScreen({
       if (currentUserMember) {
         setCurrentUserRole(currentUserMember.role);
       } else {
-        setCurrentUserRole("member");
+        setCurrentUserRole('member');
       }
+      
+      console.log('✅ Group info loaded successfully');
     } catch (error) {
       console.error(`💥 [${componentId.current}] Error loading group info:`, error);
     } finally {
@@ -605,6 +460,8 @@ export default function GroupMessageScreen({
       if (!append) setLoading(true);
 
       try {
+        console.log('💬 Loading messages for page:', page);
+        
         const headers = await getAuthHeaders();
         const response = await fetch(
           `https://elderlybackend.onrender.com/api/groupmsg/${actualGroupId}/messages?page=${page}&limit=50`,
@@ -632,6 +489,8 @@ export default function GroupMessageScreen({
 
         setCurrentPage(paginationData.currentPage || page);
         setHasMoreMessages(paginationData.hasNext || false);
+        
+        console.log('✅ Messages loaded successfully');
       } catch (error) {
         console.error(`💥 [${componentId.current}] Error loading messages:`, error);
       } finally {
@@ -649,16 +508,18 @@ export default function GroupMessageScreen({
 
     setIsSendingMessage(true);
     const messageText = newMessage.trim();
-    setNewMessage("");
+    setNewMessage('');
     setReplyingTo(null);
 
     try {
+      console.log('📤 Sending message...');
+      
       if (isConnected) {
         socketService.sendMessage(
           actualGroupId,
           {
             text: messageText,
-            type: "text",
+            type: 'text',
           },
           replyingTo?._id
         );
@@ -666,14 +527,14 @@ export default function GroupMessageScreen({
       } else {
         const headers = await getAuthHeaders();
         const payload = {
-          content: { text: messageText, type: "text" },
+          content: { text: messageText, type: 'text' },
           replyTo: replyingTo?._id,
         };
 
         const response = await fetch(
           `https://elderlybackend.onrender.com/api/groupmsg/${actualGroupId}/messages`,
           {
-            method: "POST",
+            method: 'POST',
             headers,
             body: JSON.stringify(payload),
           }
@@ -688,1208 +549,287 @@ export default function GroupMessageScreen({
           }, 100);
         }
       }
+      
+      console.log('✅ Message sent successfully');
     } catch (error) {
       console.error(`💥 [${componentId.current}] Error sending message:`, error);
-      Alert.alert("Error", "Failed to send message");
+      Alert.alert('Error', 'Failed to send message');
       setNewMessage(messageText);
     } finally {
       setIsSendingMessage(false);
     }
   }, [actualGroupId, newMessage, replyingTo, isConnected, isSendingMessage, getAuthHeaders]);
 
-  // Handle text change
-  const handleTextChange = useCallback(
-    (text: string) => {
-      setNewMessage(text);
-
-      if (isConnected && actualGroupId) {
-        if (text.length > 0) {
-          socketService.startTyping(actualGroupId);
-          if (typingTimeoutRef.current) {
-            clearTimeout(typingTimeoutRef.current);
-          }
-          typingTimeoutRef.current = setTimeout(() => {
-            socketService.stopTyping(actualGroupId);
-          }, 2000);
-        } else {
-          socketService.stopTyping(actualGroupId);
-        }
-      }
-    },
-    [isConnected, actualGroupId]
-  );
-
-  // Load more messages
-  const loadMoreMessages = useCallback(() => {
-    if (hasMoreMessages && !isLoadingMessages && !loading) {
-      loadMessages(currentPage + 1, true);
-    }
-  }, [hasMoreMessages, isLoadingMessages, loading, currentPage, loadMessages]);
-
-  // Reload messages function
-  const reloadMessages = useCallback(() => {
-    setRefreshing(true);
-    loadMessages(1);
-  }, [loadMessages]);
-
-  // Add reaction
-  const addReaction = useCallback(
-    async (messageId: string, emoji: string) => {
-      try {
-        if (isConnected) {
-          socketService.addReaction(messageId, emoji);
-          setShowReactionPicker(null);
-          setShowQuickReactions(null);
-          setSelectedMessageForReaction(null);
-        } else {
-          const headers = await getAuthHeaders();
-          const payload = { emoji };
-
-          const response = await fetch(
-            `https://elderlybackend.onrender.com/api/groupmsg/messages/${messageId}/reactions`,
-            {
-              method: "POST",
-              headers,
-              body: JSON.stringify(payload),
-            }
-          );
-
-          if (response.ok) {
-            const data = await response.json();
-            const updatedReactions = data.data?.reactions || data.reactions || [];
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg._id === messageId
-                  ? { ...msg, reactions: updatedReactions }
-                  : msg
-              )
-            );
-            setShowReactionPicker(null);
-            setShowQuickReactions(null);
-            setSelectedMessageForReaction(null);
-          }
-        }
-      } catch (error) {
-        console.error("💥 Error adding reaction:", error);
-        Alert.alert("Error", "Failed to add reaction");
-      }
-    },
-    [isConnected, getAuthHeaders]
-  );
-
-  // Remove reaction
-  const removeReaction = useCallback(
-    async (messageId: string, emoji: string) => {
-      try {
-        if (isConnected) {
-          socketService.removeReaction(messageId, emoji);
-        } else {
-          const headers = await getAuthHeaders();
-          const response = await fetch(
-            `https://elderlybackend.onrender.com/api/groupmsg/messages/${messageId}/reactions`,
-            {
-              method: "DELETE",
-              headers,
-              body: JSON.stringify({ emoji }),
-            }
-          );
-
-          if (response.ok) {
-            const data = await response.json();
-            const updatedReactions = data.data?.reactions || data.reactions || [];
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg._id === messageId
-                  ? { ...msg, reactions: updatedReactions }
-                  : msg
-              )
-            );
-          }
-        }
-      } catch (error) {
-        console.error("💥 Error removing reaction:", error);
-      }
-    },
-    [isConnected, getAuthHeaders]
-  );
-
-  // Utility functions
-  const getMemberColor = useCallback((userId: string) => {
-    const index = groupMembers.findIndex(member => member.userId._id === userId);
-    return memberColors[index % memberColors.length];
-  }, [groupMembers]);
-
-  const getRoleDisplayName = useCallback((role: string) => {
-    const displayNames = {
-      family_member: "Family",
-      caregiver: "Caregiver",
-      elderly: "Elderly",
-      admin: "Admin",
-      member: "Member",
-    };
-    return displayNames[role as keyof typeof displayNames] || role;
-  }, []);
-
-  const getUserInitials = useCallback((name: string) => {
-    return name
-      .split(" ")
-      .map((word) => word.charAt(0))
-      .join("")
-      .toUpperCase()
-      .substring(0, 2);
-  }, []);
-
-  const formatTime = useCallback((dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-        return "Invalid date";
-      }
-
-      const now = new Date();
-      const diffInMs = now.getTime() - date.getTime();
-      const diffInDays = diffInMs / (1000 * 60 * 60 * 24);
-
-      if (diffInDays < 1) {
-        return date.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        });
-      } else if (diffInDays < 7) {
-        return date.toLocaleDateString([], {
-          weekday: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        });
-      } else {
-        return date.toLocaleDateString([], {
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        });
-      }
-    } catch (error) {
-      console.error(`💥 Error formatting time for ${dateString}:`, error);
-      return "Invalid date";
-    }
-  }, []);
-
-  // Render avatar
-  const renderAvatar = useCallback(
-    (user: any, size: number = 40) => {
-      const backgroundColor = getMemberColor(user?._id || user?.userId?._id);
-
-      if (user?.profilePicture) {
-        return (
-          <Image
-            source={{ uri: user.profilePicture }}
-            style={{
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              borderWidth: 2,
-              borderColor: "#fff",
-            }}
-          />
-        );
-      }
-
-      return (
-        <View
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor,
-            alignItems: "center",
-            justifyContent: "center",
-            borderWidth: 2,
-            borderColor: "#fff",
-          }}
-        >
-          <Text style={{ color: "white", fontWeight: "600", fontSize: size * 0.35 }}>
-            {getUserInitials(user?.name || user?.userId?.name || "U")}
-          </Text>
-        </View>
-      );
-    },
-    [getMemberColor, getUserInitials]
-  );
-
-  // Connection status
-  const renderConnectionStatus = useMemo(() => {
-    if (isConnected) return null;
-
-    return (
-      <View style={{ backgroundColor: "#ef4444", paddingVertical: 8, paddingHorizontal: 16, alignItems: "center" }}>
-        <Text style={{ color: "white", fontSize: 14, fontWeight: "600" }}>
-          🔴 {connectionStatus}
+  // ✅ NEW: Render Create/Join Buttons when no valid group
+  const renderNoGroupState = () => (
+    <View style={styles.noGroupContainer}>
+      <View style={styles.noGroupContent}>
+        <MaterialIcons name="groups" size={80} color="#16a34a" />
+        <Text style={styles.noGroupTitle}>Welcome to Group Chat</Text>
+        <Text style={styles.noGroupSubtitle}>
+          Create a new group or join an existing one to start chatting with your family and caregivers
         </Text>
-      </View>
-    );
-  }, [isConnected, connectionStatus]);
-
-  // Typing indicator
-  const renderTypingIndicator = useMemo(() => {
-    if (typingUsers.size === 0) return null;
-
-    const typingUserNames = Array.from(typingUsers).map((userId) => {
-      const member = groupMembers.find((m) => m.userId._id === userId);
-      return member?.userId.name || "Someone";
-    });
-
-    return (
-      <View style={{ paddingHorizontal: 20, paddingVertical: 8, backgroundColor: "#f9fafb" }}>
-        <Text style={{ fontSize: 14, color: "#6b7280", fontStyle: "italic" }}>
-          {typingUserNames.join(", ")}{" "}
-          {typingUserNames.length === 1 ? "is" : "are"} typing...
-        </Text>
-      </View>
-    );
-  }, [typingUsers, groupMembers]);
-
-  // Quick reactions
-  const renderQuickReactions = useCallback(
-    (messageId: string) => {
-      if (showQuickReactions !== messageId) return null;
-
-      return (
-        <View style={{
-          flexDirection: "row",
-          backgroundColor: "white",
-          borderRadius: 24,
-          paddingHorizontal: 8,
-          paddingVertical: 8,
-          marginTop: 8,
-          marginLeft: 48,
-          alignSelf: "flex-start",
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
-          elevation: 4,
-        }}>
-          {quickReactions.map((emoji, index) => (
-            <TouchableOpacity
-              key={index}
-              onPress={() => addReaction(messageId, emoji)}
-              style={{
-                paddingHorizontal: 8,
-                paddingVertical: 4,
-                borderRadius: 16,
-                marginHorizontal: 2,
-              }}
-            >
-              <Text style={{ fontSize: 20 }}>{emoji}</Text>
-            </TouchableOpacity>
-          ))}
+        
+        <View style={styles.actionButtonsContainer}>
           <TouchableOpacity
-            onPress={() => {
-              setSelectedMessageForReaction(messageId);
-              setShowReactionPicker(messageId);
-              setShowQuickReactions(null);
-            }}
-            style={{
-              backgroundColor: "#f3f4f6",
-              borderRadius: 16,
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-              marginLeft: 4,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            style={[styles.actionButton, styles.createButton]}
+            onPress={() => setShowCreateModal(true)}
           >
-            <Text style={{ fontSize: 16, color: "#6b7280", fontWeight: "600" }}>+</Text>
+            <MaterialIcons name="add" size={24} color="white" />
+            <Text style={styles.actionButtonText}>Create Group</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, styles.joinButton]}
+            onPress={() => setShowJoinModal(true)}
+          >
+            <MaterialIcons name="group-add" size={24} color="white" />
+            <Text style={styles.actionButtonText}>Join Group</Text>
           </TouchableOpacity>
         </View>
-      );
-    },
-    [showQuickReactions, addReaction]
+      </View>
+    </View>
   );
 
-  // Message reactions
-  const renderMessageReactions = useCallback(
-    (message: Message) => {
-      if (!message.reactions || message.reactions.length === 0) return null;
-
-      const groupedReactions = message.reactions.reduce((acc, reaction) => {
-        if (!acc[reaction.emoji]) {
-          acc[reaction.emoji] = [];
-        }
-        acc[reaction.emoji].push(reaction);
-        return acc;
-      }, {} as Record<string, any[]>);
-
-      return (
-        <View style={{
-          flexDirection: "row",
-          flexWrap: "wrap",
-          marginTop: 8,
-          marginLeft: 48,
-        }}>
-          {Object.entries(groupedReactions).map(([emoji, reactions]) => {
-            const userReacted = reactions.some(
-              (r) => r.userId === currentUser?._id
-            );
-
-            return (
-              <TouchableOpacity
-                key={emoji}
-                onPress={() => {
-                  if (userReacted) {
-                    removeReaction(message._id, emoji);
-                  } else {
-                    addReaction(message._id, emoji);
-                  }
-                }}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  borderRadius: 12,
-                  paddingHorizontal: 8,
-                  paddingVertical: 4,
-                  marginRight: 6,
-                  marginBottom: 4,
-                  backgroundColor: userReacted ? "#3b82f6" : "#f9fafb",
-                  borderWidth: userReacted ? 0 : 1,
-                  borderColor: "transparent",
-                }}
-              >
-                <Text style={{ fontSize: 14, marginRight: 4 }}>{emoji}</Text>
-                <Text style={{
-                  fontSize: 12,
-                  fontWeight: "600",
-                  color: userReacted ? "white" : "#6b7280",
-                }}>
-                  {reactions.length}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      );
-    },
-    [currentUser, addReaction, removeReaction]
-  );
-
-  // Message item - No avatar for sent messages
-  const renderMessage = useCallback(
-    ({ item, index }: { item: Message; index: number }) => {
-      const isOwnMessage = item.sender._id === currentUser?._id;
-      const hasReactions = item.reactions && item.reactions.length > 0;
-
-      const showSenderName =
-        !isOwnMessage &&
-        (index === 0 || messages[index - 1]?.sender._id !== item.sender._id);
-
-      return (
-        <View style={{
-          marginVertical: 4,
-          paddingHorizontal: 4,
-          alignItems: isOwnMessage ? "flex-end" : "flex-start",
-        }}>
-          <View style={{
-            flexDirection: isOwnMessage ? "row-reverse" : "row",
-            alignItems: "flex-end",
-            maxWidth: "85%",
-          }}>
-            {/* Only show avatar for received messages */}
-            {!isOwnMessage && (
-              <View style={{ marginHorizontal: 8, marginBottom: 4 }}>
-                {renderAvatar(item.sender, 32)}
-              </View>
-            )}
-
-            <TouchableOpacity
-              onLongPress={() => setShowQuickReactions(item._id)}
-              style={{
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-                borderRadius: 16,
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.1,
-                shadowRadius: 2,
-                elevation: 2,
-                backgroundColor: isOwnMessage ? "#10b981" : "white",
-                borderBottomRightRadius: isOwnMessage ? 4 : 16,
-                borderBottomLeftRadius: isOwnMessage ? 16 : 4,
-                marginLeft: isOwnMessage ? 40 : 0,
-                marginRight: isOwnMessage ? 0 : 40,
-              }}
-              activeOpacity={0.8}
-            >
-              {showSenderName && (
-                <Text style={{
-                  fontSize: 12,
-                  fontWeight: "600",
-                  color: "#6b7280",
-                  marginBottom: 4,
-                }}>
-                  {item.sender.name}
-                </Text>
-              )}
-              <Text style={{
-                fontSize: 16,
-                lineHeight: 20,
-                color: isOwnMessage ? "white" : "#1f2937",
-              }}>
-                {item.content.text}
-              </Text>
-              <View style={{
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                alignItems: "center",
-                marginTop: 4,
-              }}>
-                <Text style={{
-                  fontSize: 12,
-                  fontWeight: "500",
-                  color: isOwnMessage ? "rgba(255,255,255,0.8)" : "#9ca3af",
-                }}>
-                  {formatTime(item.createdAt)}
-                  {item.isEdited && " • edited"}
-                </Text>
-              </View>
-            </TouchableOpacity>
+  // ✅ NEW: Create Group Modal
+  const renderCreateGroupModal = () => (
+    <Modal
+      visible={showCreateModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowCreateModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.createGroupModal}>
+          <Text style={styles.createGroupTitle}>Create New Group</Text>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Group Name *</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Enter group name"
+              value={createGroupName}
+              onChangeText={setCreateGroupName}
+              maxLength={100}
+            />
+          </View>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Description</Text>
+            <TextInput
+              style={[styles.textInput, styles.textAreaInput]}
+              placeholder="Enter group description (optional)"
+              value={createGroupDescription}
+              onChangeText={setCreateGroupDescription}
+              multiline
+              numberOfLines={3}
+              maxLength={500}
+            />
           </View>
 
-          {hasReactions && renderMessageReactions(item)}
-          {renderQuickReactions(item._id)}
-        </View>
-      );
-    },
-    [currentUser, messages, renderAvatar, formatTime, renderMessageReactions, renderQuickReactions]
-  );
-
-  // Group details modal
-  const renderGroupDetailsModal = useCallback(
-    () => (
-      <Modal
-        visible={showGroupDetails}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowGroupDetails(false)}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: "#fef3e2" }}>
-          <View style={{
-            backgroundColor: "#16a34a",
-            paddingHorizontal: 20,
-            paddingTop: Platform.OS === "ios" ? 60 : StatusBar.currentHeight ? StatusBar.currentHeight + 16 : 40,
-            paddingBottom: 20,
-            borderBottomLeftRadius: 24,
-            borderBottomRightRadius: 24,
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 8,
-          }}>
-            <Text style={{ fontSize: 20, fontWeight: "bold", color: "white" }}>Group Details</Text>
-            <TouchableOpacity
-              onPress={() => setShowGroupDetails(false)}
-              style={{
-                backgroundColor: "rgba(239, 68, 68, 0.1)",
-                borderRadius: 20,
-                width: 40,
-                height: 40,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <MaterialIcons name="close" size={20} color="#EF4444" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={{ flex: 1, paddingHorizontal: 20, paddingVertical: 16 }}>
-            {groupInfo ? (
-              <>
-                <View style={{
-                  backgroundColor: "white",
-                  borderRadius: 16,
-                  padding: 24,
-                  marginBottom: 20,
-                  alignItems: "center",
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
-                  elevation: 2,
-                }}>
-                  <View style={{
-                    backgroundColor: "#10b981",
-                    borderRadius: 40,
-                    width: 80,
-                    height: 80,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: 16,
-                  }}>
-                    <MaterialIcons name="groups" size={36} color="white" />
-                  </View>
-                  <Text style={{
-                    fontSize: 24,
-                    fontWeight: "bold",
-                    color: "#1f2937",
-                    textAlign: "center",
-                    marginBottom: 8,
-                  }}>
-                    {groupInfo.name}
-                  </Text>
-                  <Text style={{
-                    fontSize: 16,
-                    color: "#6b7280",
-                    textAlign: "center",
-                    lineHeight: 24,
-                    marginBottom: 20,
-                  }}>
-                    {groupInfo.description}
-                  </Text>
-
-                  <View style={{ flexDirection: "row", justifyContent: "space-around", width: "100%" }}>
-                    <View style={{
-                      alignItems: "center",
-                      backgroundColor: "#fef3e2",
-                      borderRadius: 12,
-                      padding: 16,
-                      minWidth: 80,
-                    }}>
-                      <Text style={{
-                        fontSize: 20,
-                        fontWeight: "bold",
-                        color: "#ea580c",
-                        marginBottom: 4,
-                      }}>
-                        {groupMembers.length}
-                      </Text>
-                      <Text style={{
-                        fontSize: 12,
-                        color: "#6b7280",
-                        fontWeight: "500",
-                        textAlign: "center",
-                      }}>
-                        Members
-                      </Text>
-                    </View>
-                    <View style={{
-                      alignItems: "center",
-                      backgroundColor: "#fef3e2",
-                      borderRadius: 12,
-                      padding: 16,
-                      minWidth: 80,
-                    }}>
-                      <Text style={{
-                        fontSize: 20,
-                        fontWeight: "bold",
-                        color: "#ea580c",
-                        marginBottom: 4,
-                      }}>
-                        {messages.length}
-                      </Text>
-                      <Text style={{
-                        fontSize: 12,
-                        color: "#6b7280",
-                        fontWeight: "500",
-                        textAlign: "center",
-                      }}>
-                        Messages
-                      </Text>
-                    </View>
-                    <View style={{
-                      alignItems: "center",
-                      backgroundColor: "#fef3e2",
-                      borderRadius: 12,
-                      padding: 16,
-                      minWidth: 80,
-                    }}>
-                      <Text style={{
-                        fontSize: 20,
-                        fontWeight: "bold",
-                        color: "#ea580c",
-                        marginBottom: 4,
-                      }}>
-                        {Math.ceil(
-                          (Date.now() - new Date(groupInfo.createdAt).getTime()) /
-                          (1000 * 60 * 60 * 24)
-                        )}
-                      </Text>
-                      <Text style={{
-                        fontSize: 12,
-                        color: "#6b7280",
-                        fontWeight: "500",
-                        textAlign: "center",
-                      }}>
-                        Days
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={{
-                  backgroundColor: "white",
-                  borderRadius: 16,
-                  padding: 20,
-                  marginBottom: 16,
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
-                  elevation: 2,
-                }}>
-                  <Text style={{
-                    fontSize: 18,
-                    fontWeight: "bold",
-                    color: "#1f2937",
-                    marginBottom: 16,
-                  }}>
-                    Information
-                  </Text>
-
-                  <View style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingVertical: 12,
-                    borderBottomWidth: 1,
-                    borderBottomColor: "#fef3e2",
-                  }}>
-                    <Text style={{ fontSize: 14, color: "#6b7280", fontWeight: "500" }}>Type</Text>
-                    <Text style={{ fontSize: 14, color: "#1f2937", fontWeight: "600" }}>
-                      {groupInfo.groupType}
-                    </Text>
-                  </View>
-
-                  <View style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingVertical: 12,
-                    borderBottomWidth: 1,
-                    borderBottomColor: "#fef3e2",
-                  }}>
-                    <Text style={{ fontSize: 14, color: "#6b7280", fontWeight: "500" }}>Created</Text>
-                    <Text style={{ fontSize: 14, color: "#1f2937", fontWeight: "600" }}>
-                      {new Date(groupInfo.createdAt).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </Text>
-                  </View>
-
-                  <View style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingVertical: 12,
-                  }}>
-                    <Text style={{ fontSize: 14, color: "#6b7280", fontWeight: "500" }}>Created By</Text>
-                    <Text style={{ fontSize: 14, color: "#1f2937", fontWeight: "600" }}>
-                      {groupInfo.createdBy.name}
-                    </Text>
-                  </View>
-                </View>
-              </>
-            ) : (
-              <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                <Text style={{ fontSize: 16, color: "#9ca3af", fontStyle: "italic" }}>
-                  No group information available
-                </Text>
-              </View>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-    ),
-    [showGroupDetails, groupInfo, groupMembers, messages]
-  );
-
-  // Members list modal
-  const renderMembersListModal = useCallback(
-    () => (
-      <Modal
-        visible={showMembersList}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowMembersList(false)}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: "#fef3e2" }}>
-          <View style={{
-            backgroundColor: "#16a34a",
-            paddingHorizontal: 20,
-            paddingTop: Platform.OS === "ios" ? 60 : StatusBar.currentHeight ? StatusBar.currentHeight + 16 : 40,
-            paddingBottom: 20,
-            borderBottomLeftRadius: 24,
-            borderBottomRightRadius: 24,
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 8,
-          }}>
-            <Text style={{ fontSize: 20, fontWeight: "bold", color: "white" }}>
-              Members ({groupMembers.length})
-            </Text>
-            <TouchableOpacity
-              onPress={() => setShowMembersList(false)}
-              style={{
-                backgroundColor: "rgba(239, 68, 68, 0.1)",
-                borderRadius: 20,
-                width: 40,
-                height: 40,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <MaterialIcons name="close" size={20} color="#EF4444" />
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={groupMembers}
-            keyExtractor={(item) => item._id}
-            renderItem={({ item }) => {
-              const memberName = item.userId?.name || item.userId?.email || "Unknown User";
-              const memberEmail = item.userId?.email || "No email provided";
-              const roleColor = getMemberColor(item.userId._id);
-
-              return (
-                <View style={{
-                  backgroundColor: "white",
-                  borderRadius: 16,
-                  padding: 16,
-                  marginHorizontal: 16,
-                  marginVertical: 6,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
-                  elevation: 2,
-                }}>
-                  {renderAvatar(item.userId || { name: memberName }, 50)}
-
-                  <View style={{ flex: 1, marginLeft: 16 }}>
-                    <View style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 4,
-                    }}>
-                      <Text style={{
-                        fontSize: 16,
-                        fontWeight: "600",
-                        color: "#1f2937",
-                        flex: 1,
-                      }}>
-                        {memberName}
-                      </Text>
-                      <View style={{
-                        borderRadius: 12,
-                        paddingHorizontal: 10,
-                        paddingVertical: 4,
-                        backgroundColor: roleColor,
-                      }}>
-                        <Text style={{
-                          fontSize: 12,
-                          fontWeight: "bold",
-                          color: "white",
-                          textAlign: "center",
-                        }}>
-                          {getRoleDisplayName(item.role)}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={{
-                      fontSize: 14,
-                      color: "#6b7280",
-                      marginBottom: 2,
-                    }}>
-                      {memberEmail}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: "#9ca3af" }}>
-                      Joined{" "}
-                      {new Date(item.addedAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </Text>
-                  </View>
-                </View>
-              );
-            }}
-            style={{ flex: 1 }}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={() => (
-              <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                <Text style={{
-                  fontSize: 16,
-                  color: "#9ca3af",
-                  fontStyle: "italic",
-                  textAlign: "center",
-                }}>
-                  No members found
-                </Text>
-              </View>
-            )}
-          />
-        </SafeAreaView>
-      </Modal>
-    ),
-    [showMembersList, groupMembers, renderAvatar, getMemberColor, getRoleDisplayName]
-  );
-
-  // Reaction picker modal
-  const renderReactionPickerModal = useCallback(
-    () => (
-      <Modal
-        visible={!!showReactionPicker}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => {
-          setShowReactionPicker(null);
-          setSelectedMessageForReaction(null);
-        }}
-      >
-        <View style={{
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.5)",
-          alignItems: "center",
-          justifyContent: "center",
-        }}>
-          <View style={{
-            backgroundColor: "white",
-            borderRadius: 16,
-            padding: 24,
-            marginHorizontal: 20,
-            maxWidth: "90%",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.25,
-            shadowRadius: 16,
-            elevation: 16,
-          }}>
-            <Text style={{
-              fontSize: 18,
-              fontWeight: "600",
-              color: "#1f2937",
-              textAlign: "center",
-              marginBottom: 20,
-            }}>
-              Choose a reaction
-            </Text>
-
-            <View style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              justifyContent: "center",
-            }}>
-              {reactions.map((emoji, index) => (
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Group Type</Text>
+            <View style={styles.groupTypeContainer}>
+              {['family', 'medical', 'social'].map((type) => (
                 <TouchableOpacity
-                  key={index}
-                  onPress={() => {
-                    if (selectedMessageForReaction) {
-                      addReaction(selectedMessageForReaction, emoji);
-                    }
-                  }}
-                  style={{
-                    backgroundColor: "#fef3e2",
-                    borderRadius: 16,
-                    width: 56,
-                    height: 56,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    margin: 6,
-                    shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 2,
-                  }}
+                  key={type}
+                  style={[
+                    styles.groupTypeOption,
+                    createGroupType === type && styles.groupTypeOptionSelected
+                  ]}
+                  onPress={() => setCreateGroupType(type)}
                 >
-                  <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                  <Text style={[
+                    styles.groupTypeText,
+                    createGroupType === type && styles.groupTypeTextSelected
+                  ]}>
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
-        </View>
-      </Modal>
-    ),
-    [showReactionPicker, selectedMessageForReaction, addReaction, reactions]
-  );
-
-  // UPDATED HEADER - Completely removed the "24" badge
-  const renderHeader = useMemo(
-    () => (
-      <View style={{
-        backgroundColor: "#16a34a",
-        paddingHorizontal: 20,
-        paddingTop: Platform.OS === "ios" ? 64 : StatusBar.currentHeight ? StatusBar.currentHeight + 16 : 40,
-        paddingBottom: 20,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 8,
-      }}>
-        <TouchableOpacity
-          onPress={() => setShowGroupDetails(true)}
-          style={{ flex: 1 }}
-        >
-          <Text style={{ fontSize: 20, fontWeight: "bold", color: "white" }}>
-            {groupInfo?.name || "Group Chat"}
-          </Text>
-          <Text style={{
-            fontSize: 14,
-            color: "rgba(255,255,255,0.8)",
-            marginTop: 2,
-            fontWeight: "500",
-          }}>
-            {groupMembers.length} members • {getRoleDisplayName(currentUserRole)}
-          </Text>
-        </TouchableOpacity>
-
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          {/* Reload button */}
-          <TouchableOpacity
-            onPress={reloadMessages}
-            style={{
-              backgroundColor: "rgba(255,255,255,0.2)",
-              borderRadius: 20,
-              width: 40,
-              height: 40,
-              alignItems: "center",
-              justifyContent: "center",
-              marginRight: 8,
-            }}
-          >
-            <MaterialIcons name="refresh" size={20} color="white" />
-          </TouchableOpacity>
-
-          {/* People icon */}
-          <TouchableOpacity
-            onPress={() => setShowMembersList(true)}
-            style={{
-              backgroundColor: "rgba(255,255,255,0.2)",
-              borderRadius: 20,
-              width: 40,
-              height: 40,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <MaterialIcons name="people" size={20} color="white" />
-          </TouchableOpacity>
+          
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              onPress={() => setShowCreateModal(false)}
+              style={[styles.modalActionButton, styles.cancelButton]}
+              disabled={creatingGroup}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={createGroup}
+              style={[styles.modalActionButton, styles.createGroupButton]}
+              disabled={creatingGroup || !createGroupName.trim()}
+            >
+              {creatingGroup ? (
+                <ActivityIndicator color="white" size="small" />
+              ) : (
+                <Text style={styles.createButtonText}>Create Group</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    ),
-    [groupInfo?.name, groupMembers.length, currentUserRole, getRoleDisplayName, reloadMessages]
+    </Modal>
   );
 
-  // Early returns
-  if (!actualGroupId || !currentUser) {
+  // ✅ NEW: Join Group Modal
+  const renderJoinGroupModal = () => (
+    <Modal
+      visible={showJoinModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowJoinModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.joinGroupModal}>
+          <Text style={styles.joinGroupTitle}>Join Existing Group</Text>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Group ID *</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Enter group ID to join"
+              value={joinGroupId}
+              onChangeText={setJoinGroupId}
+              autoCapitalize="none"
+            />
+            <View style={styles.infoBox}>
+              <MaterialIcons name="info" size={16} color="#16a34a" />
+              <Text style={styles.infoText}>
+                Ask your family member or group admin for the Group ID to join their group.
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              onPress={() => setShowJoinModal(false)}
+              style={[styles.modalActionButton, styles.cancelButton]}
+              disabled={joiningGroup}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={joinGroup}
+              style={[styles.modalActionButton, styles.joinGroupButton]}
+              disabled={joiningGroup || !joinGroupId.trim()}
+            >
+              {joiningGroup ? (
+                <ActivityIndicator color="white" size="small" />
+              ) : (
+                <Text style={styles.joinButtonText}>Join Group</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // ✅ CORRECTED: Main render logic with proper groupId checking
+  if (!currentUser) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#10b981" }}>
-        <ActivityIndicator size="large" color="white" />
-        <Text style={{ marginTop: 20, fontSize: 16, color: "white", fontWeight: "600" }}>
-          Initializing chat...
-        </Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#16a34a" />
+        <Text style={styles.loadingText}>Initializing...</Text>
       </View>
+    );
+  }
+
+  // ✅ CORRECTED: Show Create/Join buttons if no valid group
+  if (!hasValidGroup || !actualGroupId) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+        {renderNoGroupState()}
+        {renderCreateGroupModal()}
+        {renderJoinGroupModal()}
+      </SafeAreaView>
     );
   }
 
   if (loading && messages.length === 0) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#10b981" }}>
-        <ActivityIndicator size="large" color="white" />
-        <Text style={{ marginTop: 20, fontSize: 16, color: "white", fontWeight: "600" }}>
-          Loading messages...
-        </Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#16a34a" />
+        <Text style={styles.loadingText}>Loading messages...</Text>
       </View>
     );
   }
 
-  // MAIN RETURN - Fixed layout with improved input styling
+  // ✅ CORRECTED: Show full chat interface when we have a valid group
   return (
-    <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
 
-      {renderConnectionStatus}
-      {renderHeader}
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => setShowGroupDetails(true)}
+          style={styles.headerLeft}
+        >
+          <Text style={styles.headerTitle}>
+            {groupInfo?.name || 'Group Chat'}
+          </Text>
+          <Text style={styles.headerSubtitle}>
+            {groupMembers.length} members
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            onPress={() => setShowMembersList(true)}
+            style={styles.headerButton}
+          >
+            <MaterialIcons name="people" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Messages Container */}
-      <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
+      <View style={styles.messagesContainer}>
         <FlatList
           ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item._id}
-          renderItem={renderMessage}
-          onEndReached={loadMoreMessages}
-          onEndReachedThreshold={0.1}
-          refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            loadMessages(1);
-          }}
+          renderItem={({ item }) => (
+            <View style={styles.messageItem}>
+              <Text style={styles.messageSender}>{item.sender.name}</Text>
+              <Text style={styles.messageText}>{item.content.text}</Text>
+            </View>
+          )}
           showsVerticalScrollIndicator={false}
-          style={{ paddingHorizontal: 16, paddingVertical: 8 }}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          windowSize={8}
-          initialNumToRender={10}
-          ListHeaderComponent={
-            hasMoreMessages ? (
-              <View style={{ paddingVertical: 20, alignItems: "center" }}>
-                <ActivityIndicator size="small" color="#16a34a" />
-                <Text style={{
-                  marginTop: 8,
-                  fontSize: 14,
-                  color: "#6b7280",
-                  fontWeight: "500",
-                }}>
-                  Loading older messages...
-                </Text>
-              </View>
-            ) : null
-          }
-          contentContainerStyle={{ 
-            paddingBottom: TAB_BAR_HEIGHT + INPUT_CONTAINER_HEIGHT + 40
-          }}
+          style={styles.messagesList}
         />
-
-        {renderTypingIndicator}
       </View>
 
-      {/* UPDATED INPUT CONTAINER - Better styled placeholder and no "24" badge */}
-      <View style={{
-        position: "absolute",
-        bottom: TAB_BAR_HEIGHT,
-        left: 0,
-        right: 0,
-        height: INPUT_CONTAINER_HEIGHT,
-        backgroundColor: "white",
-        borderTopWidth: 1,
-        borderTopColor: "#e5e7eb",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 8,
-      }}>
-        {replyingTo && (
-          <View style={{
-            backgroundColor: "#f0fdf4",
-            borderRadius: 12,
-            padding: 8,
-            marginBottom: 8,
-            flexDirection: "row",
-            alignItems: "center",
-          }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{
-                fontSize: 10,
-                fontWeight: "600",
-                color: "#16a34a",
-                marginBottom: 1,
-              }}>
-                Replying to {replyingTo.sender.name}
-              </Text>
-              <Text style={{
-                fontSize: 12,
-                color: "#6b7280",
-                lineHeight: 14,
-              }}>
-                {replyingTo.content.text}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setReplyingTo(null)}
-              style={{
-                backgroundColor: "rgba(239, 68, 68, 0.1)",
-                borderRadius: 12,
-                width: 24,
-                height: 24,
-                alignItems: "center",
-                justifyContent: "center",
-                marginLeft: 8,
-              }}
-            >
-              <MaterialIcons name="close" size={14} color="#EF4444" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* IMPROVED INPUT ROW - Better styled placeholder */}
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          {/* Input Field - Improved styling */}
-          <View style={{
-            flex: 1,
-            backgroundColor: "#f8f9fa",
-            borderRadius: 20,
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            marginRight: 12,
-            minHeight: 44,
-            maxHeight: 100,
-            borderWidth: 1,
-            borderColor: "#e9ecef",
-            justifyContent: "center",
-          }}>
+      {/* Input Container */}
+      <View style={styles.inputContainer}>
+        <View style={styles.inputRow}>
+          <View style={styles.inputWrapper}>
             <TextInput
               ref={inputRef}
               value={newMessage}
-              onChangeText={handleTextChange}
+              onChangeText={setNewMessage}
               placeholder="Type a message..."
               placeholderTextColor="#6c757d"
               multiline
-              style={{
-                fontSize: 16,
-                lineHeight: 22,
-                color: "#212529",
-                textAlignVertical: "center",
-                fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
-                fontWeight: '400',
-                paddingVertical: 0,
-              }}
+              style={styles.messageInput}
             />
           </View>
 
-          {/* Send Button */}
           <TouchableOpacity
             onPress={sendMessage}
             disabled={isSendingMessage || !newMessage.trim()}
-            style={{
-              borderRadius: 22,
-              width: 44,
-              height: 44,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: newMessage.trim() ? "#16a34a" : "#d1d5db",
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.1,
-              shadowRadius: 4,
-              elevation: 3,
-            }}
+            style={[
+              styles.sendButton,
+              newMessage.trim() ? styles.sendButtonActive : styles.sendButtonInactive
+            ]}
           >
             {isSendingMessage ? (
               <ActivityIndicator size="small" color="white" />
@@ -1900,11 +840,353 @@ export default function GroupMessageScreen({
         </View>
       </View>
 
-      {renderGroupDetailsModal()}
-      {renderMembersListModal()}
-      {renderReactionPickerModal()}
+      {renderCreateGroupModal()}
+      {renderJoinGroupModal()}
     </View>
   );
 }
 
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+  },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 16,
+    color: '#16a34a',
+    fontWeight: '600',
+  },
 
+  // No Group State Styles
+  noGroupContainer: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  noGroupContent: {
+    alignItems: 'center',
+    maxWidth: 300,
+  },
+  noGroupTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1f2937',
+    textAlign: 'center',
+    marginBottom: 12,
+    marginTop: 20,
+  },
+  noGroupSubtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 40,
+  },
+  actionButtonsContainer: {
+    width: '100%',
+    gap: 16,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  createButton: {
+    backgroundColor: '#16a34a',
+  },
+  joinButton: {
+    backgroundColor: '#3b82f6',
+  },
+  actionButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'white',
+    marginLeft: 8,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  createGroupModal: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  joinGroupModal: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  createGroupTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1f2937',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  joinGroupTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1f2937',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  textAreaInput: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  infoBox: {
+    backgroundColor: '#f0fdf4',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#16a34a',
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 20,
+  },
+  groupTypeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  groupTypeOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  groupTypeOptionSelected: {
+    backgroundColor: '#16a34a',
+    borderColor: '#16a34a',
+  },
+  groupTypeText: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  groupTypeTextSelected: {
+    color: 'white',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  modalActionButton: {
+    flex: 0.48,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f3f4f6',
+  },
+  createGroupButton: {
+    backgroundColor: '#16a34a',
+  },
+  joinGroupButton: {
+    backgroundColor: '#3b82f6',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  createButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  joinButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+
+  // Header styles
+  header: {
+    backgroundColor: '#16a34a',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : StatusBar.currentHeight ? StatusBar.currentHeight + 16 : 40,
+    paddingBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Messages styles
+  messagesContainer: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  messagesList: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  messageItem: {
+    backgroundColor: 'white',
+    padding: 12,
+    marginVertical: 4,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  messageSender: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  messageText: {
+    fontSize: 16,
+    color: '#1f2937',
+    lineHeight: 20,
+  },
+
+  // Input styles
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  inputWrapper: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginRight: 12,
+    minHeight: 44,
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    justifyContent: 'center',
+  },
+  messageInput: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#212529',
+    textAlignVertical: 'center',
+    paddingVertical: 0,
+  },
+  sendButton: {
+    borderRadius: 22,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sendButtonActive: {
+    backgroundColor: '#16a34a',
+  },
+  sendButtonInactive: {
+    backgroundColor: '#d1d5db',
+  },
+});
